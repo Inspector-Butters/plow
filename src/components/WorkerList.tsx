@@ -21,7 +21,7 @@ export function WorkerList({ plots, selectedId, onSelect }: WorkerListProps) {
               onClick={() => onSelect(worker)}
             >
               <span className={`status-dot status-dot--${worker.status}`} />
-              <span><strong>{worker.threadName}</strong><small>{statusLabel(worker.status)}</small></span>
+              <span><strong>{worker.displayName}</strong><small>{worker.threadName} · {statusLabel(worker.status)}</small></span>
             </button>
           ))}
         </div>
@@ -29,4 +29,3 @@ export function WorkerList({ plots, selectedId, onSelect }: WorkerListProps) {
     </section>
   );
 }
-

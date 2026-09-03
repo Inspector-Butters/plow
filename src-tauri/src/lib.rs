@@ -40,6 +40,8 @@ pub enum FarmActivity {
 pub struct Worker {
     pub id: String,
     pub parent_id: Option<String>,
+    #[serde(default = "default_worker_display_name")]
+    pub display_name: String,
     pub thread_name: String,
     pub repo_name: String,
     pub repo_path: String,
@@ -190,13 +192,22 @@ fn mark_reviewed(
 
 #[tauri::command]
 fn open_thread(state: State<'_, Arc<SharedState>>, thread_id: String) -> Result<String, String> {
+    let cwd = state
+        .snapshot
+        .lock()
+        .map_err(|error| error.to_string())?
+        .workers
+        .iter()
+        .find(|worker| worker.id == thread_id)
+        .map(|worker| worker.cwd.clone())
+        .ok_or("That Codex thread is no longer available")?;
     let codex = state
         .codex_path
         .lock()
         .map_err(|error| error.to_string())?
         .clone()
         .ok_or("Codex is not connected")?;
-    terminal::open_thread(&codex, &thread_id)
+    terminal::open_thread(&codex, &thread_id, &cwd)
 }
 
 #[tauri::command]
@@ -247,7 +258,7 @@ pub fn emit_snapshot(app: &AppHandle, state: &Arc<SharedState>) {
 
 pub fn repo_for_cwd(cwd: &str) -> (String, String) {
     if cwd.is_empty() {
-        return ("unknown".to_string(), "unknown".to_string());
+        return ("Local files".to_string(), String::new());
     }
     let root = Command::new("git")
         .args(["-C", cwd, "rev-parse", "--show-toplevel"])
@@ -261,9 +272,24 @@ pub fn repo_for_cwd(cwd: &str) -> (String, String) {
         .file_name()
         .and_then(|name| name.to_str())
         .filter(|name| !name.is_empty())
-        .unwrap_or("unknown")
+        .unwrap_or("Local files")
         .to_string();
     (name, root)
+}
+
+fn default_worker_display_name() -> String {
+    "Codex".to_string()
+}
+
+pub fn display_name_for_cwd(cwd: &str, repo_name: &str) -> String {
+    Path::new(cwd)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .filter(|name| !name.is_empty())
+        .or_else(|| (!repo_name.is_empty() && repo_name != "unknown").then_some(repo_name))
+        .or_else(|| (!cwd.is_empty()).then_some(cwd))
+        .unwrap_or("Codex")
+        .to_string()
 }
 
 pub fn activity_for(id: &str) -> FarmActivity {
@@ -276,6 +302,21 @@ pub fn activity_for(id: &str) -> FarmActivity {
         2 => FarmActivity::Planting,
         3 => FarmActivity::Harvesting,
         _ => FarmActivity::Carrying,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn names_workers_after_their_launch_folder() {
+        assert_eq!(
+            display_name_for_cwd("/home/alex/projects/plow", "repo"),
+            "plow"
+        );
+        assert_eq!(display_name_for_cwd("/", "Local files"), "Local files");
+        assert_eq!(display_name_for_cwd("", ""), "Codex");
     }
 }
 

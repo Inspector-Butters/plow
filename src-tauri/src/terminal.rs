@@ -18,18 +18,22 @@ pub fn find_in_path(name: &str) -> Option<PathBuf> {
     })
 }
 
-pub fn open_thread(codex: &Path, thread_id: &str) -> Result<String, String> {
+pub fn open_thread(codex: &Path, thread_id: &str, cwd: &str) -> Result<String, String> {
     let id = Uuid::parse_str(thread_id)
         .map_err(|_| "Codex returned an invalid thread id".to_string())?;
+    let working_directory = Path::new(cwd);
+    if !working_directory.is_absolute() || !working_directory.is_dir() {
+        return Err("The thread's working folder is no longer available".to_string());
+    }
 
     #[cfg(target_os = "macos")]
     {
-        return open_macos(codex, &id.to_string());
+        return open_macos(codex, &id.to_string(), cwd);
     }
 
     #[cfg(target_os = "linux")]
     {
-        return open_linux(codex, &id.to_string());
+        return open_linux(codex, &id.to_string(), cwd);
     }
 
     #[allow(unreachable_code)]
@@ -37,14 +41,16 @@ pub fn open_thread(codex: &Path, thread_id: &str) -> Result<String, String> {
 }
 
 #[cfg(target_os = "macos")]
-fn open_macos(codex: &Path, thread_id: &str) -> Result<String, String> {
+fn open_macos(codex: &Path, thread_id: &str, cwd: &str) -> Result<String, String> {
     use std::os::unix::fs::PermissionsExt;
 
     let script_path = env::temp_dir().join(format!("plow-resume-{thread_id}.command"));
     let script = format!(
-        "#!/bin/sh\nexec {} --remote unix:// resume {}\n",
+        "#!/bin/sh\ntrap 'rm -f -- \"$0\"' EXIT\ncd -- {} || exit 1\n{} resume {} --remote unix:// --cd {}\nstatus=$?\nif [ \"$status\" -ne 0 ]; then\n  printf '\\nPlow could not resume this Codex thread (exit %s).\\n' \"$status\"\n  printf 'Press Return to close this window. '\n  read -r _\nfi\nexit \"$status\"\n",
+        shell_quote(cwd),
         shell_quote(&codex.to_string_lossy()),
-        shell_quote(thread_id)
+        shell_quote(thread_id),
+        shell_quote(cwd),
     );
     fs::write(&script_path, script)
         .map_err(|error| format!("Could not prepare terminal handoff: {error}"))?;
@@ -64,14 +70,31 @@ fn shell_quote(value: &str) -> String {
 }
 
 #[cfg(target_os = "linux")]
-fn open_linux(codex: &Path, thread_id: &str) -> Result<String, String> {
-    let codex_arg = codex.as_os_str();
+const LINUX_RESUME_SCRIPT: &str = r#"
+if ! cd -- "$3"; then
+  printf '\nPlow could not open the thread working folder.\n'
+  exec "${SHELL:-/bin/sh}" -l
+fi
+"$1" resume "$2" --remote unix:// --cd "$3"
+status=$?
+if [ "$status" -ne 0 ]; then
+  printf '\nPlow could not resume this Codex thread (exit %s).\n' "$status"
+  printf 'The command was: codex resume %s --remote unix:// --cd %s\n' "$2" "$3"
+  exec "${SHELL:-/bin/sh}" -l
+fi
+exit "$status"
+"#;
+
+#[cfg(target_os = "linux")]
+fn open_linux(codex: &Path, thread_id: &str, cwd: &str) -> Result<String, String> {
     let candidates: &[(&str, &[&str])] = &[
-        ("xdg-terminal-exec", &[]),
+        ("xdg-terminal-exec", &["--"]),
         ("x-terminal-emulator", &["-e"]),
         ("gnome-terminal", &["--"]),
         ("konsole", &["-e"]),
-        ("kitty", &[]),
+        ("kitty", &["--"]),
+        ("wezterm", &["start", "--"]),
+        ("foot", &[]),
         ("alacritty", &["-e"]),
         ("xterm", &["-e"]),
     ];
@@ -83,8 +106,14 @@ fn open_linux(codex: &Path, thread_id: &str) -> Result<String, String> {
         let mut command = Command::new(path);
         command
             .args(*prefix)
-            .arg(codex_arg)
-            .args(["--remote", "unix://", "resume", thread_id]);
+            .arg("/bin/sh")
+            .arg("-c")
+            .arg(LINUX_RESUME_SCRIPT)
+            .arg("plow-resume")
+            .arg(codex.as_os_str())
+            .arg(thread_id)
+            .arg(cwd)
+            .current_dir(cwd);
         if command.spawn().is_ok() {
             return Ok(format!("Opening the thread in {terminal}"));
         }
@@ -99,7 +128,17 @@ mod tests {
 
     #[test]
     fn rejects_non_uuid_thread_ids() {
-        let result = open_thread(Path::new("codex"), "$(unsafe)");
+        let result = open_thread(Path::new("codex"), "$(unsafe)", "/tmp");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn rejects_relative_working_directories() {
+        let result = open_thread(
+            Path::new("codex"),
+            "019f5ade-99ad-7ed1-b2f3-159136634cf7",
+            "relative/path",
+        );
         assert!(result.is_err());
     }
 

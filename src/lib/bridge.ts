@@ -25,9 +25,9 @@ export async function markReviewed(attentionId: string): Promise<void> {
   await invoke("mark_reviewed", { attentionId });
 }
 
-export async function openThread(threadId: string): Promise<string> {
+export async function openThread(threadId: string, cwd: string): Promise<string> {
   if (!isNativeApp()) {
-    const command = `codex --remote unix:// resume ${threadId}`;
+    const command = resumeCommand(threadId, cwd);
     await navigator.clipboard?.writeText(command);
     return "Browser preview copied the resume command";
   }
@@ -35,8 +35,16 @@ export async function openThread(threadId: string): Promise<string> {
   return invoke<string>("open_thread", { threadId });
 }
 
-export async function copyResumeCommand(threadId: string): Promise<void> {
-  const command = `codex --remote unix:// resume ${threadId}`;
+function shellQuote(value: string): string {
+  return `'${value.replaceAll("'", `'\\''`)}'`;
+}
+
+export function resumeCommand(threadId: string, cwd: string): string {
+  return `codex resume ${threadId} --remote unix:// --cd ${shellQuote(cwd)}`;
+}
+
+export async function copyResumeCommand(threadId: string, cwd: string): Promise<void> {
+  const command = resumeCommand(threadId, cwd);
   await navigator.clipboard.writeText(command);
 }
 
@@ -70,4 +78,3 @@ export async function isWindowFocused(): Promise<boolean> {
   const { getCurrentWindow } = await import("@tauri-apps/api/window");
   return getCurrentWindow().isFocused();
 }
-

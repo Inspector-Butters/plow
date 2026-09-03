@@ -1,5 +1,6 @@
 import type { CSSProperties, ReactNode } from "react";
 import type { FarmActivity, Worker } from "../types";
+import { motionDelay } from "../lib/layout";
 import { statusLabel } from "../lib/workers";
 
 const statusIcons: Record<Worker["status"], string> = {
@@ -27,6 +28,7 @@ function ActivityScene({ activity }: { activity: FarmActivity }) {
           <i className="plow-tool__blade" />
         </span>
         <span className="work-effect soil-clods"><i /><i /><i /></span>
+        <span className="work-effect plow-furrow"><i /><i /><i /></span>
       </>
     ),
     watering: (
@@ -35,14 +37,16 @@ function ActivityScene({ activity }: { activity: FarmActivity }) {
           <i className="watering-can__handle" />
           <i className="watering-can__spout" />
         </span>
-        <span className="work-effect water-drops"><i /><i /><i /></span>
+        <span className="work-effect water-drops"><i /><i /><i /><i /><i /></span>
+        <span className="work-effect water-splash"><i /><i /></span>
         <span className="work-effect tiny-flower"><i /></span>
       </>
     ),
     planting: (
       <>
         <span className="work-prop seed-pouch"><i /></span>
-        <span className="work-effect falling-seed" />
+        <span className="work-effect falling-seeds"><i /><i /><i /></span>
+        <span className="work-effect soil-mound" />
         <span className="work-effect new-sprout"><i /><i /></span>
       </>
     ),
@@ -50,6 +54,7 @@ function ActivityScene({ activity }: { activity: FarmActivity }) {
       <>
         <span className="work-prop sickle"><i className="sickle__blade" /></span>
         <span className="work-effect wheat-stalks"><i /><i /><i /></span>
+        <span className="work-effect harvest-swish" />
       </>
     ),
     carrying: (
@@ -69,7 +74,11 @@ interface RobotWorkerProps {
 }
 
 export function RobotWorker({ worker, selected, x, y, onSelect }: RobotWorkerProps) {
-  const style = { "--worker-x": `${x}%`, "--worker-y": `${y}%` } as CSSProperties;
+  const style = {
+    "--worker-x": `${x}%`,
+    "--worker-y": `${y}%`,
+    "--motion-delay": `${motionDelay(worker.id)}s`,
+  } as CSSProperties;
   const subAgent = worker.parentId !== null;
 
   return (
@@ -77,7 +86,7 @@ export function RobotWorker({ worker, selected, x, y, onSelect }: RobotWorkerPro
       className={`robot robot--${worker.status} robot--${worker.activity}${selected ? " robot--selected" : ""}${subAgent ? " robot--subagent" : ""}`}
       style={style}
       type="button"
-      aria-label={`${worker.repoName}, ${worker.threadName}, ${statusLabel(worker.status)}, ${activityLabels[worker.activity]}`}
+      aria-label={`${worker.displayName}, ${worker.threadName}, ${statusLabel(worker.status)}, ${activityLabels[worker.activity]}`}
       aria-pressed={selected}
       onClick={() => onSelect(worker)}
     >
@@ -93,11 +102,12 @@ export function RobotWorker({ worker, selected, x, y, onSelect }: RobotWorkerPro
       </span>
       <span className="robot__label">
         <span className={`status-dot status-dot--${worker.status}`} />
-        <strong>{worker.repoName}</strong>
+        <strong>{worker.displayName}</strong>
         {subAgent && <span className="robot__crew-mark">crew</span>}
       </span>
       <span className="robot__tooltip" role="tooltip">
-        <strong>{worker.threadName}</strong>
+        <strong>{worker.displayName}</strong>
+        <span>{worker.threadName}</span>
         <span>{statusLabel(worker.status)} · {activityLabels[worker.activity]}</span>
         {worker.branch && <span>⌘ {worker.branch}</span>}
       </span>

@@ -1,0 +1,84 @@
+name: Release desktop apps
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: ${{ matrix.label }}
+    runs-on: ${{ matrix.platform }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: Linux x86_64
+            platform: ubuntu-22.04
+            args: ""
+            linux: true
+          - label: macOS Apple Silicon
+            platform: macos-latest
+            args: "--target aarch64-apple-darwin"
+            rust_targets: aarch64-apple-darwin,x86_64-apple-darwin
+          - label: macOS Intel
+            platform: macos-latest
+            args: "--target x86_64-apple-darwin"
+            rust_targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Linux build dependencies
+        if: matrix.linux
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf xdg-utils
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust_targets }}
+
+      - name: Cache Rust builds
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "./src-tauri -> target"
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Verify frontend
+        run: |
+          npm test
+          npm run check
+
+      - name: Verify Rust
+        run: |
+          cargo fmt --manifest-path src-tauri/Cargo.toml --check
+          cargo test --manifest-path src-tauri/Cargo.toml
+
+      - name: Build and publish release bundles
+        uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          APPLE_SIGNING_IDENTITY: "-"
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: "Plow ${{ github.ref_name }}"
+          releaseBody: |
+            Download the AppImage or Debian package for Linux, or the DMG matching your Mac (Apple Silicon or Intel).
+
+            Plow requires a current Codex CLI with managed app-server daemon support.
+          releaseDraft: false
+          prerelease: false
+          args: ${{ matrix.args }}

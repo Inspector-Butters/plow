@@ -6,6 +6,7 @@ export const demoWorkers: Worker[] = [
   {
     id: "019f5ade-99ad-7ed1-b2f3-159136634cf7",
     parentId: null,
+    displayName: "plow",
     threadName: "Polish the agent dashboard",
     repoName: "plow",
     repoPath: "/Users/demo/dev/plow",
@@ -22,6 +23,7 @@ export const demoWorkers: Worker[] = [
   {
     id: "01a067db-92ea-7081-88be-d1518179660e",
     parentId: "019f5ade-99ad-7ed1-b2f3-159136634cf7",
+    displayName: "plow",
     threadName: "Check the notification flow",
     repoName: "plow",
     repoPath: "/Users/demo/dev/plow",
@@ -38,6 +40,7 @@ export const demoWorkers: Worker[] = [
   {
     id: "01a061d3-6d6c-7493-a8e0-bc1ee1b524fa",
     parentId: null,
+    displayName: "beacon-chain",
     threadName: "Investigate state recovery",
     repoName: "prysm",
     repoPath: "/Users/demo/dev/prysm",
@@ -54,6 +57,7 @@ export const demoWorkers: Worker[] = [
   {
     id: "01a06322-bd04-76d1-a7de-fea9326a85ce",
     parentId: null,
+    displayName: "consensus-specs",
     threadName: "Review consensus specification changes",
     repoName: "consensus-specs",
     repoPath: "/Users/demo/dev/consensus-specs",
@@ -70,6 +74,7 @@ export const demoWorkers: Worker[] = [
   {
     id: "01a062f3-0cc2-76d1-a399-b75bf204ee05",
     parentId: null,
+    displayName: "infra",
     threadName: "Fix devnet bootstrap",
     repoName: "infra",
     repoPath: "/Users/demo/dev/infra",
@@ -93,4 +98,3 @@ export const demoSnapshot: MonitorSnapshot = {
     message: "Browser preview — showing demo workers",
   },
 };
-

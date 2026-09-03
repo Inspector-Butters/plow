@@ -1,6 +1,6 @@
 use crate::{
-    activity_for, emit_snapshot, repo_for_cwd, ConnectionInfo, ConnectionStatus, SharedState,
-    Worker, WorkerStatus,
+    activity_for, display_name_for_cwd, emit_snapshot, repo_for_cwd, ConnectionInfo,
+    ConnectionStatus, SharedState, Worker, WorkerStatus,
 };
 use serde_json::{json, Value};
 use std::{
@@ -394,6 +394,7 @@ fn normalize_worker(
             .get("parentThreadId")
             .and_then(Value::as_str)
             .map(str::to_string),
+        display_name: display_name_for_cwd(&cwd, &repo_name),
         thread_name: thread
             .get("name")
             .and_then(Value::as_str)
@@ -588,5 +589,17 @@ mod tests {
     fn labels_subagent_sources() {
         assert_eq!(source_label(Some(&json!({"subAgent": {}}))), "subAgent");
         assert_eq!(source_label(Some(&json!("cli"))), "cli");
+    }
+
+    #[test]
+    fn normalizes_the_launch_folder_as_the_worker_name() {
+        let thread = json!({
+            "id": "019f5ade-99ad-7ed1-b2f3-159136634cf7",
+            "cwd": "/srv/projects/plow/frontend",
+            "status": { "type": "active", "activeFlags": [] }
+        });
+        let worker = normalize_worker(&thread, None, &mut HashMap::new(), 1);
+        assert_eq!(worker.display_name, "frontend");
+        assert_ne!(worker.repo_name, "unknown");
     }
 }

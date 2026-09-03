@@ -1,6 +1,6 @@
 [package]
 name = "plow"
-version = "0.1.0"
+version = "0.2.0"
 description = "A cozy Codex agent farm monitor"
 authors = ["Plow contributors"]
 edition = "2021"

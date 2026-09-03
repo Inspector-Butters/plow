@@ -2,6 +2,25 @@
 
 Plow turns active Codex threads into a small robot farm. Repositories become field plots, top-level threads become lead workers, and sub-agents work nearby. Approval requests, questions, failures, and completed turns are surfaced as calm but unmistakable attention states.
 
+## Install a release
+
+Download the latest build from [GitHub Releases](https://github.com/Inspector-Butters/plow/releases/latest), or use the installer:
+
+```sh
+curl -fsSLO https://raw.githubusercontent.com/Inspector-Butters/plow/main/scripts/install.sh
+sh install.sh
+```
+
+If the repository is private, download from the Releases page while signed into GitHub. The installer works directly once the repository is public; private installs require an API token in `GITHUB_TOKEN` and an authenticated download of the script.
+
+On Linux, the installer puts the matching AppImage at `~/.local/bin/plow` (or `$XDG_BIN_HOME/plow`). On macOS, it downloads and opens the DMG for Apple Silicon or Intel; drag Plow into Applications. The GitHub macOS builds are ad-hoc signed rather than notarized, so the first launch may require right-clicking Plow and choosing **Open**, or allowing it in **System Settings → Privacy & Security**.
+
+Plow requires a current [Codex CLI](https://learn.chatgpt.com/docs/developer-commands?surface=cli) with managed app-server daemon support. Sessions monitored by Plow should connect to the shared daemon:
+
+```sh
+codex --remote unix://
+```
+
 ## Development
 
 ```sh

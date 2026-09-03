@@ -10,6 +10,7 @@ export type FarmActivity = "plowing" | "watering" | "planting" | "harvesting" | 
 export interface Worker {
   id: string;
   parentId: string | null;
+  displayName: string;
   threadName: string;
   repoName: string;
   repoPath: string;
@@ -57,4 +58,3 @@ export interface AttentionItem {
   title: string;
   body: string;
 }
-

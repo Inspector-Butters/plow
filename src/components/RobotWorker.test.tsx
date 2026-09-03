@@ -17,4 +17,12 @@ describe("RobotWorker", () => {
     expect(container.querySelector(".work-prop")).toBeInTheDocument();
     unmount();
   });
+
+  it("uses the launch folder as the visible worker name", () => {
+    const { getByText } = render(
+      <RobotWorker worker={demoWorkers[2]} selected={false} x={50} y={50} onSelect={() => undefined} />,
+    );
+
+    expect(getByText("beacon-chain", { selector: ".robot__label strong" })).toBeInTheDocument();
+  });
 });

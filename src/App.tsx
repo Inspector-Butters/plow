@@ -13,26 +13,10 @@ import {
   sendNativeNotification,
   subscribeToSnapshots,
 } from "./lib/bridge";
+import { plotPosition, workerPosition } from "./lib/layout";
 import { attentionFor, groupWorkers } from "./lib/workers";
 import type { MonitorSnapshot, PlowSettings, RepoPlot, Worker } from "./types";
 import "./styles.css";
-
-const plotAnchors = [
-  { x: 24, y: 39 },
-  { x: 67, y: 39 },
-  { x: 30, y: 64 },
-  { x: 71, y: 65 },
-  { x: 48, y: 50 },
-  { x: 53, y: 73 },
-];
-
-const workerOffsets = [
-  { x: 0, y: 0 },
-  { x: 10, y: 5 },
-  { x: -10, y: 6 },
-  { x: 7, y: 14 },
-  { x: -7, y: 15 },
-];
 
 function EmptyFarm({ connected }: { connected: boolean }) {
   return (
@@ -85,7 +69,7 @@ export default function App() {
   };
 
   return (
-    <main className={settings?.reducedMotion ? "app app--reduced-motion" : "app"}>
+    <main className={`${settings?.reducedMotion ? "app app--reduced-motion" : "app"}${(snapshot?.workers.length ?? 0) > 50 ? " app--crowded" : (snapshot?.workers.length ?? 0) > 20 ? " app--dense" : ""}`}>
       <header className="topbar">
         <div className="brand">
           <img src="/assets/plow-bot.png" alt="" />
@@ -103,11 +87,10 @@ export default function App() {
       <section className="farm" aria-label="Codex agent farm">
         <FarmCanvas />
         <div className="farm__wash" />
-        {plots.map((plot, plotIndex) => (
+        {plots.map((plot) => (
           <FarmPlot
             key={plot.id}
             plot={plot}
-            plotIndex={plotIndex}
             selectedId={selectedId}
             onSelect={(worker) => setSelectedId(worker.id)}
           />
@@ -120,9 +103,9 @@ export default function App() {
       <Inspector
         worker={selected}
         onClose={() => setSelectedId(null)}
-        onOpen={async (worker) => { await openThread(worker.id); }}
+        onOpen={async (worker) => { await openThread(worker.id, worker.cwd); }}
         onReviewed={removeReviewed}
-        onCopy={async (worker) => { await copyResumeCommand(worker.id); }}
+        onCopy={async (worker) => { await copyResumeCommand(worker.id, worker.cwd); }}
       />
       <footer className="farm-footer">
         <span>{plots.length} field{plots.length === 1 ? "" : "s"}</span>
@@ -133,20 +116,20 @@ export default function App() {
   );
 }
 
-function FarmPlot({ plot, plotIndex, selectedId, onSelect }: { plot: RepoPlot; plotIndex: number; selectedId: string | null; onSelect: (worker: Worker) => void }) {
-  const anchor = plotAnchors[plotIndex % plotAnchors.length];
+function FarmPlot({ plot, selectedId, onSelect }: { plot: RepoPlot; selectedId: string | null; onSelect: (worker: Worker) => void }) {
+  const anchor = plotPosition(plot.id);
   return (
     <Fragment>
-      <div className="farm-plot-label" style={{ left: `${anchor.x}%`, top: `${anchor.y - 12}%` }}>{plot.name}</div>
-      {plot.workers.map((worker, workerIndex) => {
-        const offset = workerOffsets[workerIndex % workerOffsets.length];
+      <div className="farm-plot-label" style={{ left: `${anchor.x}%`, top: `${anchor.y - 17}%` }}>{plot.name}</div>
+      {plot.workers.map((worker) => {
+        const position = workerPosition(plot.id, worker.id);
         return (
           <RobotWorker
             key={worker.id}
             worker={worker}
             selected={worker.id === selectedId}
-            x={anchor.x + offset.x}
-            y={anchor.y + offset.y}
+            x={position.x}
+            y={position.y}
             onSelect={onSelect}
           />
         );

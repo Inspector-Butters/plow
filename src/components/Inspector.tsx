@@ -31,7 +31,7 @@ export function Inspector({ worker, onClose, onOpen, onReviewed, onCopy }: Inspe
   return (
     <aside className="inspector" aria-label="Selected worker details">
       <button className="icon-button inspector__close" type="button" onClick={onClose} aria-label="Close worker details">×</button>
-      <div className="inspector__eyebrow">{worker.parentId ? "Crew member" : "Lead worker"}</div>
+      <div className="inspector__eyebrow">{worker.displayName} · {worker.parentId ? "Crew member" : "Lead worker"}</div>
       <h2>{worker.threadName}</h2>
       <div className={`inspector__status inspector__status--${worker.status}`}>
         <span className={`status-dot status-dot--${worker.status}`} />
@@ -57,4 +57,3 @@ export function Inspector({ worker, onClose, onOpen, onReviewed, onCopy }: Inspe
     </aside>
   );
 }
-
