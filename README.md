@@ -11,7 +11,18 @@ curl -fsSLO https://raw.githubusercontent.com/Inspector-Butters/plow/main/script
 sh install.sh
 ```
 
-If the repository is private, download from the Releases page while signed into GitHub. The installer works directly once the repository is public; private installs require an API token in `GITHUB_TOKEN` and an authenticated download of the script.
+If the repository is private, either download from the Releases page while signed into GitHub, or give a fine-grained token read access to the repository contents and run:
+
+```sh
+curl -fsSL \
+  -H "Authorization: Bearer $GITHUB_TOKEN" \
+  -H "Accept: application/vnd.github.raw+json" \
+  https://api.github.com/repos/Inspector-Butters/plow/contents/scripts/install.sh \
+  -o install.sh
+sh install.sh
+```
+
+The shorter public installer command works directly if the repository is made public later.
 
 On Linux, the installer puts the matching AppImage at `~/.local/bin/plow` (or `$XDG_BIN_HOME/plow`). On macOS, it downloads and opens the DMG for Apple Silicon or Intel; drag Plow into Applications. The GitHub macOS builds are ad-hoc signed rather than notarized, so the first launch may require right-clicking Plow and choosing **Open**, or allowing it in **System Settings → Privacy & Security**.
 

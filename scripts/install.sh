@@ -11,7 +11,19 @@ if [ -n "${GITHUB_TOKEN:-}" ]; then
 else
   curl -fsSL "$release_api" -o "$install_temp/release.json"
 fi
-asset_urls=$(sed -n 's/.*"browser_download_url": "\([^"]*\)".*/\1/p' "$install_temp/release.json")
+asset_records=$(awk '
+  /"url": "https:\/\/api.github.com\/repos\/[^"]*\/releases\/assets\/[0-9][0-9]*"/ {
+    api_url = $0
+    sub(/^[[:space:]]*"url": "/, "", api_url)
+    sub(/".*$/, "", api_url)
+  }
+  /"browser_download_url": "/ {
+    browser_url = $0
+    sub(/^[[:space:]]*"browser_download_url": "/, "", browser_url)
+    sub(/".*$/, "", browser_url)
+    if (api_url != "") print api_url "|" browser_url
+  }
+' "$install_temp/release.json")
 
 system=$(uname -s)
 architecture=$(uname -m)
@@ -35,17 +47,19 @@ case "$system:$architecture" in
     ;;
 esac
 
-asset_url=$(printf '%s\n' "$asset_urls" | grep -Ei "$pattern" | sed -n '1p')
-if [ -z "$asset_url" ]; then
+asset_record=$(printf '%s\n' "$asset_records" | grep -Ei "$pattern" | sed -n '1p' || true)
+if [ -z "$asset_record" ]; then
   echo "The latest Plow release does not contain the expected bundle for $system $architecture." >&2
   exit 1
 fi
+asset_api=${asset_record%%|*}
+asset_url=${asset_record#*|}
 
 if [ "$system" = "Linux" ]; then
   destination_dir=${XDG_BIN_HOME:-"${HOME}/.local/bin"}
   mkdir -p "$destination_dir"
   if [ -n "${GITHUB_TOKEN:-}" ]; then
-    curl -fL -H "Authorization: Bearer $GITHUB_TOKEN" "$asset_url" -o "$install_temp/plow.AppImage"
+    curl -fL -H "Accept: application/octet-stream" -H "Authorization: Bearer $GITHUB_TOKEN" "$asset_api" -o "$install_temp/plow.AppImage"
   else
     curl -fL "$asset_url" -o "$install_temp/plow.AppImage"
   fi
@@ -57,7 +71,7 @@ else
   mkdir -p "$download_dir"
   destination="$download_dir/Plow-latest-$architecture.dmg"
   if [ -n "${GITHUB_TOKEN:-}" ]; then
-    curl -fL -H "Authorization: Bearer $GITHUB_TOKEN" "$asset_url" -o "$destination"
+    curl -fL -H "Accept: application/octet-stream" -H "Authorization: Bearer $GITHUB_TOKEN" "$asset_api" -o "$destination"
   else
     curl -fL "$asset_url" -o "$destination"
   fi
