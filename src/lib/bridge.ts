@@ -53,6 +53,7 @@ export async function loadSettings(): Promise<PlowSettings> {
     notifyWhenUnfocused: true,
     keepInTray: true,
     reducedMotion: window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+    codexPath: "",
   };
   if (!isNativeApp()) return defaults;
   const { invoke } = await import("@tauri-apps/api/core");

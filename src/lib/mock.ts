@@ -95,6 +95,7 @@ export const demoSnapshot: MonitorSnapshot = {
   connection: {
     status: "connected",
     codexVersion: "demo",
+    codexPath: "/Users/demo/.codex/packages/standalone/current/codex",
     message: "Browser preview — showing demo workers",
   },
 };

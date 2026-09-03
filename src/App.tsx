@@ -1,7 +1,8 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FarmCanvas } from "./components/FarmCanvas";
 import { Inspector } from "./components/Inspector";
 import { RobotWorker } from "./components/RobotWorker";
+import { SettingsPanel } from "./components/SettingsPanel";
 import { WorkerList } from "./components/WorkerList";
 import {
   copyResumeCommand,
@@ -12,6 +13,7 @@ import {
   openThread,
   sendNativeNotification,
   subscribeToSnapshots,
+  updateSettings,
 } from "./lib/bridge";
 import { plotPosition, workerPosition } from "./lib/layout";
 import { attentionFor, groupWorkers } from "./lib/workers";
@@ -33,6 +35,7 @@ export default function App() {
   const [snapshot, setSnapshot] = useState<MonitorSnapshot | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [listOpen, setListOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [settings, setSettings] = useState<PlowSettings | null>(null);
   const notifiedRef = useRef(new Set<string>());
 
@@ -60,6 +63,16 @@ export default function App() {
   const selected = snapshot?.workers.find((worker) => worker.id === selectedId) ?? null;
   const attentionCount = snapshot?.workers.filter((worker) => worker.status !== "running").length ?? 0;
   const connected = snapshot?.connection.status === "connected";
+  const closeSettings = useCallback(() => setSettingsOpen(false), []);
+  const connectionLabel = connected
+    ? "Connected"
+    : snapshot?.connection.status === "missingCodex"
+      ? "Codex missing"
+      : snapshot?.connection.status === "incompatible"
+        ? "Codex incompatible"
+        : snapshot?.connection.status === "disconnected"
+          ? "Connection problem"
+          : "Connecting";
 
   const removeReviewed = async (worker: Worker) => {
     if (!worker.attentionId) return;
@@ -78,9 +91,10 @@ export default function App() {
         <div className="topbar__actions">
           {attentionCount > 0 && <span className="attention-pill"><strong>{attentionCount}</strong> need attention</span>}
           <button type="button" className="button button--glass" onClick={() => setListOpen((open) => !open)} aria-expanded={listOpen}>Workers <span>{snapshot?.workers.length ?? 0}</span></button>
-          <div className={`connection connection--${snapshot?.connection.status ?? "connecting"}`} title={snapshot?.connection.message}>
-            <span />{connected ? "Connected" : snapshot?.connection.status === "missingCodex" ? "Codex missing" : "Connecting"}
-          </div>
+          <button type="button" className="button button--glass" onClick={() => setSettingsOpen(true)} disabled={!settings}>Settings</button>
+          <button type="button" className={`connection connection--${snapshot?.connection.status ?? "connecting"}`} title={snapshot?.connection.message} onClick={() => setSettingsOpen(true)}>
+            <span />{connectionLabel}
+          </button>
         </div>
       </header>
 
@@ -107,6 +121,18 @@ export default function App() {
         onReviewed={removeReviewed}
         onCopy={async (worker) => { await copyResumeCommand(worker.id, worker.cwd); }}
       />
+      {settingsOpen && settings && (
+        <SettingsPanel
+          settings={settings}
+          connection={snapshot?.connection ?? null}
+          onClose={closeSettings}
+          onSave={async (next) => {
+            await updateSettings(next);
+            setSettings(next);
+            closeSettings();
+          }}
+        />
+      )}
       <footer className="farm-footer">
         <span>{plots.length} field{plots.length === 1 ? "" : "s"}</span>
         <span className="farm-footer__hint">Select a worker to inspect their thread</span>

@@ -9,7 +9,7 @@ use std::{
     os::unix::net::UnixStream,
     path::{Path, PathBuf},
     process::Command,
-    sync::Arc,
+    sync::{atomic::Ordering, Arc},
     thread,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
@@ -22,11 +22,15 @@ pub trait HostTransport: Send + Sync {
 
 pub struct LocalDaemonTransport {
     codex: PathBuf,
+    monitor_revision: u64,
 }
 
 impl LocalDaemonTransport {
-    pub fn new(codex: PathBuf) -> Self {
-        Self { codex }
+    pub fn new(codex: PathBuf, monitor_revision: u64) -> Self {
+        Self {
+            codex,
+            monitor_revision,
+        }
     }
 }
 
@@ -37,10 +41,15 @@ impl HostTransport for LocalDaemonTransport {
             .output()
             .map_err(|error| format!("Could not start the Codex daemon: {error}"))?;
         if !daemon.status.success() {
-            return Err(format!(
-                "Codex daemon failed to start: {}",
-                String::from_utf8_lossy(&daemon.stderr).trim()
-            ));
+            let details = String::from_utf8_lossy(&daemon.stderr);
+            if details.contains("managed standalone Codex install not found") {
+                return Err(format!(
+                    "Plow found Codex at {}, but that installation cannot start the managed daemon. Install the standalone Codex build, or select its executable in Settings. Codex said: {}",
+                    self.codex.display(),
+                    details.trim()
+                ));
+            }
+            return Err(format!("Codex daemon failed to start: {}", details.trim()));
         }
 
         let socket_path = daemon_socket(&self.codex)?;
@@ -55,7 +64,7 @@ impl HostTransport for LocalDaemonTransport {
         let (socket, _) = client("ws://localhost/", stream)
             .map_err(|error| format!("Codex WebSocket handshake failed: {error}"))?;
 
-        monitor_socket(socket, app, state)
+        monitor_socket(socket, app, state, self.monitor_revision)
     }
 }
 
@@ -70,35 +79,49 @@ pub fn spawn_monitor(app: AppHandle, state: Arc<SharedState>) {
                 None,
                 "Connecting to the Codex farm",
             );
-            let codex = match resolve_codex() {
-                Some(path) => path,
-                None => {
+            let monitor_revision = state.monitor_revision.load(Ordering::Relaxed);
+            let configured_path = state
+                .persisted
+                .lock()
+                .expect("persisted lock")
+                .settings
+                .codex_path
+                .clone();
+            let codex = match resolve_codex(&configured_path) {
+                Ok(Some(path)) => path,
+                Ok(None) => {
+                    *state.codex_path.lock().expect("codex path lock") = None;
                     update_connection(
                         &app,
                         &state,
                         ConnectionStatus::MissingCodex,
                         None,
-                        "Codex CLI was not found in PATH. Install Codex, then restart Plow.",
+                        "Codex was not found. Open Settings to choose its executable, or install the standalone Codex build.",
                     );
-                    thread::sleep(Duration::from_secs(10));
+                    thread::sleep(Duration::from_secs(5));
+                    continue;
+                }
+                Err(error) => {
+                    *state.codex_path.lock().expect("codex path lock") = None;
+                    update_connection(&app, &state, ConnectionStatus::MissingCodex, None, &error);
+                    thread::sleep(Duration::from_secs(5));
                     continue;
                 }
             };
 
             let version = codex_version(&codex);
             *state.codex_path.lock().expect("codex path lock") = Some(codex.clone());
-            let transport = LocalDaemonTransport::new(codex);
+            let transport = LocalDaemonTransport::new(codex, monitor_revision);
             if let Err(error) = transport.run(&app, &state) {
-                update_connection(
-                    &app,
-                    &state,
-                    ConnectionStatus::Disconnected,
-                    version,
-                    &error,
-                );
+                let status = if error.contains("cannot start the managed daemon") {
+                    ConnectionStatus::Incompatible
+                } else {
+                    ConnectionStatus::Disconnected
+                };
+                update_connection(&app, &state, status, version, &error);
             }
             thread::sleep(backoff);
-            backoff = (backoff * 2).min(Duration::from_secs(20));
+            backoff = (backoff * 2).min(Duration::from_secs(5));
         }
     });
 }
@@ -107,6 +130,7 @@ fn monitor_socket(
     mut socket: WebSocket<UnixStream>,
     app: &AppHandle,
     state: &Arc<SharedState>,
+    monitor_revision: u64,
 ) -> Result<(), String> {
     write_message(
         &mut socket,
@@ -126,6 +150,9 @@ fn monitor_socket(
     let mut repo_cache = HashMap::new();
 
     loop {
+        if state.monitor_revision.load(Ordering::Relaxed) != monitor_revision {
+            return Ok(());
+        }
         if initialized && Instant::now() >= next_poll {
             write_message(
                 &mut socket,
@@ -518,25 +545,51 @@ fn update_connection(
     version: Option<String>,
     message: &str,
 ) {
+    let codex_path = state
+        .codex_path
+        .lock()
+        .expect("codex path lock")
+        .as_ref()
+        .map(|path| path.to_string_lossy().into_owned());
     state.snapshot.lock().expect("snapshot lock").connection = ConnectionInfo {
         status,
         codex_version: version,
+        codex_path,
         message: message.to_string(),
     };
     emit_snapshot(app, state);
 }
 
-fn resolve_codex() -> Option<PathBuf> {
-    std::env::var("PLOW_CODEX_PATH")
-        .ok()
-        .and_then(|path| crate::terminal::find_in_path(&path))
+fn resolve_codex(configured_path: &str) -> Result<Option<PathBuf>, String> {
+    if !configured_path.is_empty() {
+        return crate::terminal::validate_executable_path(configured_path)
+            .map(Some)
+            .map_err(|error| format!("Configured Codex path is unavailable: {error}"));
+    }
+
+    if let Ok(path) = std::env::var("PLOW_CODEX_PATH") {
+        if !path.trim().is_empty() {
+            return crate::terminal::validate_executable_path(path.trim())
+                .map(Some)
+                .map_err(|error| format!("PLOW_CODEX_PATH is unavailable: {error}"));
+        }
+    }
+
+    let codex_home = std::env::var_os("CODEX_HOME").map(PathBuf::from);
+    let home = std::env::var_os("HOME").map(PathBuf::from);
+    let managed = managed_codex_location(codex_home.as_deref(), home.as_deref())
+        .and_then(|path| crate::terminal::find_in_path(&path.to_string_lossy()));
+
+    Ok(managed
         .or_else(|| crate::terminal::find_in_path("codex"))
         .or_else(|| {
             std::env::var_os("HOME").and_then(|home| {
                 [".local/bin/codex", ".cargo/bin/codex", ".codex/bin/codex"]
                     .into_iter()
                     .map(|suffix| PathBuf::from(&home).join(suffix))
-                    .find(|candidate| candidate.is_file())
+                    .find_map(|candidate| {
+                        crate::terminal::find_in_path(&candidate.to_string_lossy())
+                    })
             })
         })
         .or_else(|| {
@@ -546,9 +599,15 @@ fn resolve_codex() -> Option<PathBuf> {
                 "/usr/bin/codex",
             ]
             .into_iter()
-            .map(PathBuf::from)
-            .find(|candidate| candidate.is_file())
-        })
+            .find_map(crate::terminal::find_in_path)
+        }))
+}
+
+fn managed_codex_location(codex_home: Option<&Path>, home: Option<&Path>) -> Option<PathBuf> {
+    codex_home
+        .map(Path::to_path_buf)
+        .or_else(|| home.map(|path| path.join(".codex")))
+        .map(|path| path.join("packages/standalone/current/codex"))
 }
 
 fn codex_version(path: &Path) -> Option<String> {
@@ -601,5 +660,24 @@ mod tests {
         let worker = normalize_worker(&thread, None, &mut HashMap::new(), 1);
         assert_eq!(worker.display_name, "frontend");
         assert_ne!(worker.repo_name, "unknown");
+    }
+
+    #[test]
+    fn prefers_the_documented_managed_codex_location() {
+        assert_eq!(
+            managed_codex_location(
+                Some(Path::new("/srv/custom-codex")),
+                Some(Path::new("/home/farmer")),
+            ),
+            Some(PathBuf::from(
+                "/srv/custom-codex/packages/standalone/current/codex"
+            ))
+        );
+        assert_eq!(
+            managed_codex_location(None, Some(Path::new("/home/farmer"))),
+            Some(PathBuf::from(
+                "/home/farmer/.codex/packages/standalone/current/codex"
+            ))
+        );
     }
 }

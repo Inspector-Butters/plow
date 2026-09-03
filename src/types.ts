@@ -37,6 +37,7 @@ export type ConnectionStatus = "connecting" | "connected" | "disconnected" | "mi
 export interface ConnectionInfo {
   status: ConnectionStatus;
   codexVersion: string | null;
+  codexPath: string | null;
   message: string;
 }
 
@@ -49,6 +50,7 @@ export interface PlowSettings {
   notifyWhenUnfocused: boolean;
   keepInTray: boolean;
   reducedMotion: boolean;
+  codexPath: string;
 }
 
 export interface AttentionItem {

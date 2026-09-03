@@ -7,7 +7,10 @@ use std::{
     fs,
     path::{Path, PathBuf},
     process::Command,
-    sync::{Arc, Mutex},
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc, Mutex,
+    },
 };
 use tauri::{
     menu::{Menu, MenuItem},
@@ -71,6 +74,7 @@ pub enum ConnectionStatus {
 pub struct ConnectionInfo {
     pub status: ConnectionStatus,
     pub codex_version: Option<String>,
+    pub codex_path: Option<String>,
     pub message: String,
 }
 
@@ -83,10 +87,12 @@ pub struct MonitorSnapshot {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[serde(default)]
 pub struct PlowSettings {
     pub notify_when_unfocused: bool,
     pub keep_in_tray: bool,
     pub reduced_motion: bool,
+    pub codex_path: String,
 }
 
 impl Default for PlowSettings {
@@ -95,6 +101,7 @@ impl Default for PlowSettings {
             notify_when_unfocused: true,
             keep_in_tray: true,
             reduced_motion: false,
+            codex_path: String::new(),
         }
     }
 }
@@ -114,6 +121,7 @@ pub struct SharedState {
     persisted: Mutex<PersistedState>,
     storage_path: PathBuf,
     codex_path: Mutex<Option<PathBuf>>,
+    monitor_revision: AtomicU64,
 }
 
 impl SharedState {
@@ -129,12 +137,14 @@ impl SharedState {
                 connection: ConnectionInfo {
                     status: ConnectionStatus::Connecting,
                     codex_version: None,
+                    codex_path: None,
                     message: "Starting the local monitor".to_string(),
                 },
             }),
             persisted: Mutex::new(persisted),
             storage_path,
             codex_path: Mutex::new(None),
+            monitor_revision: AtomicU64::new(0),
         }
     }
 
@@ -222,14 +232,37 @@ fn get_settings(state: State<'_, Arc<SharedState>>) -> Result<PlowSettings, Stri
 
 #[tauri::command]
 fn update_settings(
+    app: AppHandle,
     state: State<'_, Arc<SharedState>>,
-    settings: PlowSettings,
+    mut settings: PlowSettings,
 ) -> Result<(), String> {
-    state
-        .persisted
-        .lock()
-        .map_err(|error| error.to_string())?
-        .settings = settings;
+    settings.codex_path = settings.codex_path.trim().to_string();
+    if !settings.codex_path.is_empty() {
+        terminal::validate_executable_path(&settings.codex_path)?;
+    }
+
+    let path_changed = {
+        let mut persisted = state.persisted.lock().map_err(|error| error.to_string())?;
+        let changed = persisted.settings.codex_path != settings.codex_path;
+        persisted.settings = settings;
+        changed
+    };
+    if path_changed {
+        *state.codex_path.lock().map_err(|error| error.to_string())? = None;
+        state.monitor_revision.fetch_add(1, Ordering::Relaxed);
+        let connection = ConnectionInfo {
+            status: ConnectionStatus::Connecting,
+            codex_version: None,
+            codex_path: None,
+            message: "Applying the Codex executable setting".to_string(),
+        };
+        state
+            .snapshot
+            .lock()
+            .map_err(|error| error.to_string())?
+            .connection = connection;
+        emit_snapshot(&app, state.inner());
+    }
     state.save()
 }
 
@@ -317,6 +350,19 @@ mod display_name_tests {
         );
         assert_eq!(display_name_for_cwd("/", "Local files"), "Local files");
         assert_eq!(display_name_for_cwd("", ""), "Codex");
+    }
+
+    #[test]
+    fn loads_settings_saved_before_codex_path_was_added() {
+        let settings: PlowSettings = serde_json::from_value(serde_json::json!({
+            "notifyWhenUnfocused": false,
+            "keepInTray": true,
+            "reducedMotion": true
+        }))
+        .expect("legacy settings");
+        assert_eq!(settings.codex_path, "");
+        assert!(!settings.notify_when_unfocused);
+        assert!(settings.reduced_motion);
     }
 }
 

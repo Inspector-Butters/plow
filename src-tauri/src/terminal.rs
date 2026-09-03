@@ -1,23 +1,38 @@
-#[cfg(target_os = "macos")]
-use std::fs;
 use std::{
-    env,
+    env, fs,
+    os::unix::fs::PermissionsExt,
     path::{Path, PathBuf},
     process::Command,
 };
 use uuid::Uuid;
 
+fn executable_file(path: &Path) -> Option<PathBuf> {
+    let metadata = fs::metadata(path).ok()?;
+    if !metadata.is_file() || metadata.permissions().mode() & 0o111 == 0 {
+        return None;
+    }
+    fs::canonicalize(path).ok()
+}
+
 pub fn find_in_path(name: &str) -> Option<PathBuf> {
     if name.contains(std::path::MAIN_SEPARATOR) {
-        let path = PathBuf::from(name);
-        return path.is_file().then_some(path);
+        return executable_file(Path::new(name));
     }
 
     env::var_os("PATH").and_then(|paths| {
         env::split_paths(&paths)
             .map(|directory| directory.join(name))
-            .find(|candidate| candidate.is_file())
+            .find_map(|candidate| executable_file(&candidate))
     })
+}
+
+pub fn validate_executable_path(value: &str) -> Result<PathBuf, String> {
+    let path = Path::new(value);
+    if !path.is_absolute() {
+        return Err("Use an absolute path to the Codex executable".to_string());
+    }
+    executable_file(path)
+        .ok_or_else(|| format!("No executable Codex file was found at {}", path.display()))
 }
 
 pub fn open_thread(codex: &Path, thread_id: &str, cwd: &str) -> Result<String, String> {
@@ -44,8 +59,6 @@ pub fn open_thread(codex: &Path, thread_id: &str, cwd: &str) -> Result<String, S
 
 #[cfg(target_os = "macos")]
 fn open_macos(codex: &Path, thread_id: &str, cwd: &str) -> Result<String, String> {
-    use std::os::unix::fs::PermissionsExt;
-
     let script_path = env::temp_dir().join(format!("plow-resume-{thread_id}.command"));
     let script = format!(
         "#!/bin/sh\ntrap 'rm -f -- \"$0\"' EXIT\ncd -- {} || exit 1\n{} resume {} --remote unix:// --cd {}\nstatus=$?\nif [ \"$status\" -ne 0 ]; then\n  printf '\\nPlow could not resume this Codex thread (exit %s).\\n' \"$status\"\n  printf 'Press Return to close this window. '\n  read -r _\nfi\nexit \"$status\"\n",
@@ -142,6 +155,18 @@ mod tests {
             "relative/path",
         );
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn validates_configured_executable_paths() {
+        assert!(validate_executable_path("relative/codex").is_err());
+        assert!(validate_executable_path(
+            std::env::current_exe()
+                .expect("test executable")
+                .to_str()
+                .expect("utf-8 test path")
+        )
+        .is_ok());
     }
 
     #[cfg(target_os = "macos")]
