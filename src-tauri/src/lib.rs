@@ -306,7 +306,7 @@ pub fn activity_for(id: &str) -> FarmActivity {
 }
 
 #[cfg(test)]
-mod tests {
+mod display_name_tests {
     use super::*;
 
     #[test]

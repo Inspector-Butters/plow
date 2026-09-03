@@ -1,5 +1,7 @@
+#[cfg(target_os = "macos")]
+use std::fs;
 use std::{
-    env, fs,
+    env,
     path::{Path, PathBuf},
     process::Command,
 };
