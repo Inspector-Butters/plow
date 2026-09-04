@@ -1,10 +1,17 @@
 import type { MonitorSnapshot, PlowSettings, ProjectFolder } from "../types";
 import { demoSnapshot } from "./mock";
+import packageMetadata from "../../package.json";
 
 export type Unlisten = () => void;
 
 export function isNativeApp(): boolean {
   return "__TAURI_INTERNALS__" in window;
+}
+
+export async function getAppVersion(): Promise<string> {
+  if (!isNativeApp()) return packageMetadata.version;
+  const { getVersion } = await import("@tauri-apps/api/app");
+  return getVersion();
 }
 
 export async function getSnapshot(): Promise<MonitorSnapshot> {

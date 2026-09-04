@@ -8,6 +8,7 @@ import { UpdatePrompt } from "./components/UpdatePrompt";
 import { WorkerList } from "./components/WorkerList";
 import {
   copyResumeCommand,
+  getAppVersion,
   getSnapshot,
   isWindowFocused,
   isNativeApp,
@@ -39,14 +40,15 @@ function EmptyFarm({ connected }: { connected: boolean }) {
 function initialDemoUpdate(): AppUpdateInfo | null {
   if (!import.meta.env.DEV || isNativeApp() || !new URLSearchParams(window.location.search).has("update")) return null;
   return {
-    currentVersion: "0.3.0",
-    version: "0.3.1",
+    currentVersion: "0.3.1",
+    version: "0.3.2",
     date: null,
     notes: "Smoother workers, a sturdier harvest, and a few small fixes around the farm.",
   };
 }
 
 export default function App() {
+  const [appVersion, setAppVersion] = useState<string | null>(null);
   const [snapshot, setSnapshot] = useState<MonitorSnapshot | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [listOpen, setListOpen] = useState(false);
@@ -57,6 +59,7 @@ export default function App() {
   const notifiedRef = useRef(new Set<string>());
 
   useEffect(() => {
+    void getAppVersion().then(setAppVersion).catch((error) => console.warn("Plow could not read its version", error));
     void getSnapshot().then(setSnapshot);
     void loadSettings().then(setSettings);
     let unlisten: () => void = () => undefined;
@@ -66,12 +69,26 @@ export default function App() {
 
   useEffect(() => {
     let mounted = true;
-    void checkForAppUpdate()
-      .then((update) => {
-        if (mounted && update) setAvailableUpdate(update);
-      })
-      .catch((error) => console.warn("Plow could not check for updates", error));
-    return () => { mounted = false; };
+    const check = () => {
+      void checkForAppUpdate()
+        .then((update) => {
+          if (mounted && update) setAvailableUpdate(update);
+        })
+        .catch((error) => console.warn("Plow could not check for updates", error));
+    };
+    const checkWhenVisible = () => {
+      if (document.visibilityState === "visible") check();
+    };
+    check();
+    const interval = window.setInterval(checkWhenVisible, 15 * 60 * 1000);
+    window.addEventListener("focus", check);
+    document.addEventListener("visibilitychange", checkWhenVisible);
+    return () => {
+      mounted = false;
+      window.clearInterval(interval);
+      window.removeEventListener("focus", check);
+      document.removeEventListener("visibilitychange", checkWhenVisible);
+    };
   }, []);
 
   useEffect(() => {
@@ -113,7 +130,7 @@ export default function App() {
       <header className="topbar">
         <div className="brand">
           <img src="/assets/plow-bot.png" alt="" />
-          <div><h1>Plow</h1><p>Codex farm monitor</p></div>
+          <div><h1>Plow {appVersion && <small className="brand__version" aria-label={`Version ${appVersion}`}>v{appVersion}</small>}</h1><p>Codex farm monitor</p></div>
         </div>
         <div className="topbar__actions">
           {attentionCount > 0 && <span className="attention-pill"><strong>{attentionCount}</strong> need attention</span>}

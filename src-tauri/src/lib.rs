@@ -247,6 +247,8 @@ fn list_project_folders(home: &Path) -> Result<Vec<ProjectFolder>, String> {
 }
 
 fn validate_project_selection(home: &Path, value: &str) -> Result<PathBuf, String> {
+    let home = fs::canonicalize(home)
+        .map_err(|error| format!("Could not open the development home folder: {error}"))?;
     let selected = Path::new(value);
     if !selected.is_absolute() {
         return Err("The selected project path must be absolute".to_string());
@@ -567,5 +569,21 @@ mod tests {
         assert!(validate_project_selection(&home, "/tmp").is_err());
 
         fs::remove_dir_all(home).unwrap();
+    }
+
+    #[test]
+    fn accepts_projects_below_a_symlinked_development_home() {
+        use std::os::unix::fs::symlink;
+
+        let root = std::env::temp_dir().join(format!("plow-symlink-{}", uuid::Uuid::new_v4()));
+        let home = root.join("real-home");
+        let alias = root.join("home-alias");
+        fs::create_dir_all(home.join("project")).unwrap();
+        symlink(&home, &alias).unwrap();
+
+        let selected = alias.join("project");
+        assert!(validate_project_selection(&alias, &selected.to_string_lossy()).is_ok());
+
+        fs::remove_dir_all(root).unwrap();
     }
 }

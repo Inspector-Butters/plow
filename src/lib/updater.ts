@@ -15,31 +15,46 @@ export interface AppUpdateProgress {
 }
 
 let pendingUpdate: Update | null = null;
+let pendingUpdateInfo: AppUpdateInfo | null = null;
 let updateCheck: Promise<AppUpdateInfo | null> | null = null;
+let dismissedVersion: string | null = null;
 
 export function checkForAppUpdate(): Promise<AppUpdateInfo | null> {
   if (!isNativeApp()) return Promise.resolve(null);
+  if (pendingUpdate && pendingUpdateInfo) return Promise.resolve(pendingUpdateInfo);
   if (updateCheck) return updateCheck;
 
-  updateCheck = import("@tauri-apps/plugin-updater")
+  const currentCheck = import("@tauri-apps/plugin-updater")
     .then(({ check }) => check({ timeout: 15_000 }))
-    .then((update) => {
-      pendingUpdate = update;
+    .then(async (update) => {
       if (!update) return null;
-      return {
+      const info = {
         currentVersion: update.currentVersion,
         version: update.version,
         date: update.date ?? null,
         notes: update.body?.trim() || null,
       };
+      if (dismissedVersion === info.version) {
+        await update.close();
+        return null;
+      }
+      pendingUpdate = update;
+      pendingUpdateInfo = info;
+      return info;
     });
-
-  return updateCheck;
+  updateCheck = currentCheck;
+  currentCheck.then(
+    () => { if (updateCheck === currentCheck) updateCheck = null; },
+    () => { if (updateCheck === currentCheck) updateCheck = null; },
+  );
+  return currentCheck;
 }
 
 export async function dismissAppUpdate(): Promise<void> {
   const update = pendingUpdate;
+  dismissedVersion = pendingUpdateInfo?.version ?? null;
   pendingUpdate = null;
+  pendingUpdateInfo = null;
   if (update) await update.close();
 }
 

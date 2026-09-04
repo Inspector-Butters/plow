@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   check: vi.fn(),
@@ -8,6 +8,12 @@ const mocks = vi.hoisted(() => ({
 vi.mock("./bridge", () => ({ isNativeApp: () => true }));
 vi.mock("@tauri-apps/plugin-updater", () => ({ check: mocks.check }));
 vi.mock("@tauri-apps/plugin-process", () => ({ relaunch: mocks.relaunch }));
+
+beforeEach(() => {
+  vi.resetModules();
+  mocks.check.mockReset();
+  mocks.relaunch.mockReset().mockResolvedValue(undefined);
+});
 
 describe("app updater", () => {
   it("checks, reports download progress, installs, and relaunches", async () => {
@@ -46,5 +52,25 @@ describe("app updater", () => {
       totalBytes: 100,
     });
     expect(mocks.relaunch).toHaveBeenCalledOnce();
+  });
+
+  it("checks again after an earlier check found no update", async () => {
+    mocks.check
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        currentVersion: "0.3.1",
+        version: "0.3.2",
+        date: null,
+        body: "A newer release.",
+        close: vi.fn(),
+      });
+    const { checkForAppUpdate } = await import("./updater");
+
+    await expect(checkForAppUpdate()).resolves.toBeNull();
+    await expect(checkForAppUpdate()).resolves.toMatchObject({
+      currentVersion: "0.3.1",
+      version: "0.3.2",
+    });
+    expect(mocks.check).toHaveBeenCalledTimes(2);
   });
 });

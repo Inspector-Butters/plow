@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { resumeCommand, startAgentCommand } from "./bridge";
+import { getAppVersion, resumeCommand, startAgentCommand } from "./bridge";
 
 describe("terminal handoff", () => {
+  it("reports the packaged app version", async () => {
+    await expect(getAppVersion()).resolves.toBe("0.3.2");
+  });
+
   it("resumes the exact thread in its launch folder", () => {
     expect(resumeCommand("019f5ade-99ad-7ed1-b2f3-159136634cf7", "/Users/demo/My Farm")).toBe(
       "codex resume 019f5ade-99ad-7ed1-b2f3-159136634cf7 --remote unix:// --cd '/Users/demo/My Farm'",
