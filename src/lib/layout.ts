@@ -3,6 +3,10 @@ export interface FarmPosition {
   y: number;
 }
 
+export const workerAppearances = ["classic", "mechanic", "blossom", "harvest", "scout"] as const;
+
+export type WorkerAppearance = (typeof workerAppearances)[number];
+
 // These anchors line up with the open soil areas in the farm artwork. A plot's
 // path chooses an anchor directly, so re-sorting or adding another plot cannot
 // move one that is already on screen.
@@ -59,4 +63,10 @@ export function workerPosition(plotId: string, workerId: string): FarmPosition {
 
 export function motionDelay(workerId: string): number {
   return -(stableHash(`${workerId}:motion`) % 1900) / 1000;
+}
+
+// Thread IDs are effectively random, so hashing one gives every newly seen
+// worker a varied look while keeping that look stable across React renders.
+export function workerAppearance(workerId: string): WorkerAppearance {
+  return workerAppearances[stableHash(`${workerId}:appearance`) % workerAppearances.length];
 }

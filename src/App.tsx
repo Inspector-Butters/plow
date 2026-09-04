@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FarmCanvas } from "./components/FarmCanvas";
 import { Inspector } from "./components/Inspector";
 import { ProjectLauncher } from "./components/ProjectLauncher";
@@ -19,7 +19,7 @@ import {
   subscribeToSnapshots,
   updateSettings,
 } from "./lib/bridge";
-import { plotPosition, workerPosition } from "./lib/layout";
+import { workerPosition } from "./lib/layout";
 import { checkForAppUpdate, dismissAppUpdate, installAppUpdate } from "./lib/updater";
 import { attentionFor, groupWorkers } from "./lib/workers";
 import type { AppUpdateInfo } from "./lib/updater";
@@ -40,8 +40,8 @@ function EmptyFarm({ connected }: { connected: boolean }) {
 function initialDemoUpdate(): AppUpdateInfo | null {
   if (!import.meta.env.DEV || isNativeApp() || !new URLSearchParams(window.location.search).has("update")) return null;
   return {
-    currentVersion: "0.3.2",
-    version: "0.3.3",
+    currentVersion: "0.3.3",
+    version: "0.3.4",
     date: null,
     notes: "Smoother workers, a sturdier harvest, and a few small fixes around the farm.",
   };
@@ -205,10 +205,8 @@ export default function App() {
 }
 
 function FarmPlot({ plot, selectedId, onSelect }: { plot: RepoPlot; selectedId: string | null; onSelect: (worker: Worker) => void }) {
-  const anchor = plotPosition(plot.id);
   return (
-    <Fragment>
-      <div className="farm-plot-label" style={{ left: `${anchor.x}%`, top: `${anchor.y - 17}%` }}>{plot.name}</div>
+    <>
       {plot.workers.map((worker) => {
         const position = workerPosition(plot.id, worker.id);
         return (
@@ -222,6 +220,6 @@ function FarmPlot({ plot, selectedId, onSelect }: { plot: RepoPlot; selectedId: 
           />
         );
       })}
-    </Fragment>
+    </>
   );
 }

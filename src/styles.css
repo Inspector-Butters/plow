@@ -153,24 +153,6 @@ button { font: inherit; }
     radial-gradient(circle at 50% 48%, transparent 28%, rgba(13, 32, 23, .09) 80%, rgba(10, 23, 18, .27) 120%);
 }
 
-.farm-plot-label {
-  position: absolute;
-  z-index: 7;
-  transform: translate(-50%, -50%);
-  padding: 5px 10px;
-  color: #fdf4d2;
-  background: rgba(35, 55, 37, 0.72);
-  border: 1px solid rgba(255,255,255,.2);
-  border-radius: 999px;
-  box-shadow: 0 3px 12px rgba(27, 38, 27, .15);
-  backdrop-filter: blur(7px);
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: .05em;
-  text-transform: uppercase;
-  white-space: nowrap;
-}
-
 .robot {
   --worker-x: 50%;
   --worker-y: 50%;
@@ -200,18 +182,22 @@ button { font: inherit; }
 .app--crowded .robot { --worker-scale: .58; }
 .app--crowded .robot--subagent { --worker-scale: .5; }
 .robot__figure { position: absolute; top: 3px; left: 7px; width: 150px; height: 150px; }
-.robot__sprite {
+.robot__body {
   position: absolute;
   z-index: 3;
+  inset: 0;
+  transform-origin: 50% 72%;
+  will-change: transform;
+  animation-delay: var(--motion-delay) !important;
+}
+.robot__sprite {
+  position: absolute;
   top: -3px;
   left: 18px;
   width: 114px;
   height: 126px;
   object-fit: contain;
   image-rendering: pixelated;
-  transform-origin: 50% 88%;
-  will-change: transform;
-  animation-delay: var(--motion-delay) !important;
 }
 .robot__shadow {
   position: absolute;
@@ -226,7 +212,99 @@ button { font: inherit; }
   animation: shadow-pulse 1.8s ease-in-out infinite;
   animation-delay: var(--motion-delay);
 }
-.robot__activity { position: absolute; z-index: 4; inset: 0; pointer-events: none; }
+.robot__costume { position: absolute; inset: 0; pointer-events: none; }
+.robot__costume i { position: absolute; display: none; image-rendering: pixelated; }
+.robot__activity { position: absolute; z-index: 5; inset: 0; pointer-events: none; }
+.robot__chest-badge {
+  left: 88px;
+  top: 75px;
+  width: 9px;
+  height: 9px;
+  border: 2px solid #263b3c;
+  background: var(--costume-accent);
+  box-shadow: inset 1px 1px rgba(255,255,255,.72), 1px 1px rgba(26,37,34,.2);
+}
+.robot__boot-mark { top: 108px; width: 12px; height: 4px; border: 1px solid #3b372d; background: var(--costume-accent); }
+.robot__boot-mark--left { left: 48px; transform: rotate(6deg); }
+.robot__boot-mark--right { left: 91px; transform: rotate(-6deg); }
+
+.robot--appearance-mechanic { --costume-accent: #39cdf2; }
+.robot--appearance-mechanic .robot__hat-accessory,
+.robot--appearance-mechanic .robot__chest-badge,
+.robot--appearance-mechanic .robot__boot-mark { display: block; }
+.robot--appearance-mechanic .robot__hat-accessory {
+  left: 52px;
+  top: 10px;
+  width: 21px;
+  height: 17px;
+  border: 4px solid #9b6526;
+  border-radius: 50%;
+  background: #38bfe4;
+  box-shadow: inset 2px 2px #b9f5ff, 25px 0 0 -4px #38bfe4, 25px 0 0 0 #9b6526;
+}
+.robot--appearance-mechanic .robot__hat-accessory::after {
+  content: "";
+  position: absolute;
+  left: 17px;
+  top: 4px;
+  width: 8px;
+  height: 4px;
+  background: #9b6526;
+}
+
+.robot--appearance-blossom { --costume-accent: #bd68db; }
+.robot--appearance-blossom .robot__hat-accessory,
+.robot--appearance-blossom .robot__chest-badge,
+.robot--appearance-blossom .robot__boot-mark { display: block; }
+.robot--appearance-blossom .robot__hat-accessory {
+  left: 103px;
+  top: 18px;
+  width: 8px;
+  height: 8px;
+  border: 2px solid #6f397e;
+  border-radius: 50%;
+  background: #ffd266;
+  box-shadow: 0 -7px 0 1px #c97be2, 0 7px 0 1px #a851c4, -7px 0 0 1px #b85fd5, 7px 0 0 1px #d990ed;
+  transform: rotate(12deg);
+}
+.robot--appearance-blossom .robot__chest-badge { border-radius: 50%; }
+
+.robot--appearance-harvest { --costume-accent: #f0a42e; }
+.robot--appearance-harvest .robot__hat-accessory,
+.robot--appearance-harvest .robot__chest-badge,
+.robot--appearance-harvest .robot__boot-mark { display: block; }
+.robot--appearance-harvest .robot__hat-accessory {
+  left: 103px;
+  top: 14px;
+  width: 11px;
+  height: 18px;
+  border: 2px solid #783b24;
+  border-radius: 11px 2px 11px 2px;
+  background: linear-gradient(135deg, #ee7040 45%, #b84831 46%);
+  transform: rotate(36deg);
+}
+.robot--appearance-harvest .robot__hat-accessory::after { content: ""; position: absolute; left: 4px; bottom: -6px; width: 2px; height: 10px; background: #6d5428; }
+.robot--appearance-harvest .robot__chest-badge { transform: rotate(45deg); }
+
+.robot--appearance-scout { --costume-accent: #62c895; }
+.robot--appearance-scout .robot__hat-accessory,
+.robot--appearance-scout .robot__chest-badge,
+.robot--appearance-scout .robot__boot-mark { display: block; }
+.robot--appearance-scout .robot__hat-accessory {
+  left: 69px;
+  top: 5px;
+  width: 18px;
+  height: 11px;
+  border: 3px solid #314447;
+  border-radius: 5px 5px 8px 8px;
+  background: #74e3ae;
+  box-shadow: inset 2px 2px #c7ffe0, 0 3px #a56c2d;
+}
+.robot--appearance-scout .robot__hat-accessory::before,
+.robot--appearance-scout .robot__hat-accessory::after { content: ""; position: absolute; top: 2px; width: 7px; height: 3px; background: #284348; }
+.robot--appearance-scout .robot__hat-accessory::before { left: -9px; }
+.robot--appearance-scout .robot__hat-accessory::after { right: -9px; }
+.robot--appearance-scout .robot__chest-badge { border-radius: 50% 50% 50% 2px; transform: rotate(-18deg); }
 .work-prop, .work-effect, .work-prop i, .work-effect i { position: absolute; display: block; will-change: transform, opacity; }
 
 .plow-tool { left: 91px; top: 73px; width: 51px; height: 62px; transform-origin: 8px 8px; animation: plow-push 1.8s cubic-bezier(.55,.05,.28,1) infinite; animation-delay: var(--motion-delay); }
@@ -293,11 +371,11 @@ button { font: inherit; }
 .harvest-crate i:nth-child(2) { left: 28px; top: -15px; background: #dda642; border-color: #986821; border-radius: 50%; }
 .harvest-crate i:nth-child(3) { right: 9px; transform: scaleX(-1) rotate(-24deg); }
 
-.robot--plowing .robot__sprite { animation: plow-step 1.8s cubic-bezier(.55,.05,.28,1) infinite; }
-.robot--watering .robot__sprite { animation: watering-lean 3s cubic-bezier(.45,.04,.25,1) infinite; }
-.robot--planting .robot__sprite { animation: planting-crouch 3.1s cubic-bezier(.5,.03,.3,1) infinite; }
-.robot--harvesting .robot__sprite { animation: harvesting-lean 2.1s cubic-bezier(.58,.02,.28,1) infinite; }
-.robot--carrying .robot__sprite { animation: carrying-step 1.05s cubic-bezier(.45,.05,.3,1) infinite; }
+.robot--plowing .robot__body { animation: plow-step 1.8s cubic-bezier(.55,.05,.28,1) infinite; }
+.robot--watering .robot__body { animation: watering-lean 3s cubic-bezier(.45,.04,.25,1) infinite; }
+.robot--planting .robot__body { animation: planting-crouch 3.1s cubic-bezier(.5,.03,.3,1) infinite; }
+.robot--harvesting .robot__body { animation: harvesting-lean 2.1s cubic-bezier(.58,.02,.28,1) infinite; }
+.robot--carrying .robot__body { animation: carrying-step 1.05s cubic-bezier(.45,.05,.3,1) infinite; }
 
 .robot__label {
   position: absolute;
@@ -350,11 +428,11 @@ button { font: inherit; }
 
 .robot--waitingApproval .robot__attention, .robot--waitingInput .robot__attention, .robot--completed .robot__attention, .robot--failed .robot__attention { display: grid; }
 .robot:not(.robot--running) .robot__activity, .robot:not(.robot--running) .robot__activity * { animation-play-state: paused !important; }
-.robot--waitingApproval .robot__sprite { animation: wait-rock 2.4s cubic-bezier(.45,.05,.25,1) infinite; }
-.robot--waitingInput .robot__sprite { animation: question-tilt 2.8s cubic-bezier(.45,.05,.25,1) infinite; }
-.robot--completed .robot__sprite { animation: celebrate 1.9s cubic-bezier(.25,.75,.25,1) infinite; }
+.robot--waitingApproval .robot__body { animation: wait-rock 2.4s cubic-bezier(.45,.05,.25,1) infinite; }
+.robot--waitingInput .robot__body { animation: question-tilt 2.8s cubic-bezier(.45,.05,.25,1) infinite; }
+.robot--completed .robot__body { animation: celebrate 1.9s cubic-bezier(.25,.75,.25,1) infinite; }
 .robot--completed .robot__attention { background: #d9f0ad; }
-.robot--failed .robot__sprite { animation: error-sag 2.6s ease-in-out infinite; filter: saturate(.62); }
+.robot--failed .robot__body { animation: error-sag 2.6s ease-in-out infinite; filter: saturate(.62); }
 .robot--failed .robot__attention { color: white; border-color: #683935; background: #cf5c50; }
 .robot--selected::before { content: ""; position: absolute; inset: -5px 9px 22px; border: 2px solid rgba(255, 249, 175, .95); border-radius: 34px; box-shadow: 0 0 0 5px rgba(255, 246, 160, .2); animation: selected-pulse 1.5s ease-in-out infinite; }
 

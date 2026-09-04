@@ -1,6 +1,6 @@
 import type { CSSProperties, ReactNode } from "react";
 import type { FarmActivity, Worker } from "../types";
-import { motionDelay } from "../lib/layout";
+import { motionDelay, workerAppearance } from "../lib/layout";
 import { statusLabel } from "../lib/workers";
 
 const statusIcons: Record<Worker["status"], string> = {
@@ -74,6 +74,7 @@ interface RobotWorkerProps {
 }
 
 export function RobotWorker({ worker, selected, x, y, onSelect }: RobotWorkerProps) {
+  const appearance = workerAppearance(worker.id);
   const style = {
     "--worker-x": `${x}%`,
     "--worker-y": `${y}%`,
@@ -83,7 +84,8 @@ export function RobotWorker({ worker, selected, x, y, onSelect }: RobotWorkerPro
 
   return (
     <button
-      className={`robot robot--${worker.status} robot--${worker.activity}${selected ? " robot--selected" : ""}${subAgent ? " robot--subagent" : ""}`}
+      className={`robot robot--${worker.status} robot--${worker.activity} robot--appearance-${appearance}${selected ? " robot--selected" : ""}${subAgent ? " robot--subagent" : ""}`}
+      data-appearance={appearance}
       style={style}
       type="button"
       aria-label={`${worker.displayName}, ${worker.threadName}, ${statusLabel(worker.status)}, ${activityLabels[worker.activity]}`}
@@ -95,7 +97,15 @@ export function RobotWorker({ worker, selected, x, y, onSelect }: RobotWorkerPro
       </span>
       <span className="robot__figure" aria-hidden="true">
         <span className="robot__shadow" />
-        <img className="robot__sprite" src="/assets/plow-worker-v2.png" alt="" />
+        <span className="robot__body">
+          <img className="robot__sprite" src="/assets/plow-worker-v2.png" alt="" />
+          <span className="robot__costume">
+            <i className="robot__hat-accessory" />
+            <i className="robot__chest-badge" />
+            <i className="robot__boot-mark robot__boot-mark--left" />
+            <i className="robot__boot-mark robot__boot-mark--right" />
+          </span>
+        </span>
         <ActivityScene activity={worker.activity} />
         <span className="robot__success-stars"><i>✦</i><i>✦</i><i>✦</i></span>
         <span className="robot__error-smoke"><i /><i /><i /></span>

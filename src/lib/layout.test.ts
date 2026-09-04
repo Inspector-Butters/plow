@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { motionDelay, plotPosition, workerPosition } from "./layout";
+import { motionDelay, plotPosition, workerAppearance, workerAppearances, workerPosition } from "./layout";
 
 describe("farm layout", () => {
   it("gives a worker the same place independently of list membership or order", () => {
@@ -22,5 +22,11 @@ describe("farm layout", () => {
   it("assigns a stable negative animation phase", () => {
     expect(motionDelay("worker-a")).toBe(motionDelay("worker-a"));
     expect(motionDelay("worker-a")).toBeLessThanOrEqual(0);
+  });
+
+  it("assigns each worker a stable appearance", () => {
+    const appearance = workerAppearance("worker-a");
+    expect(workerAppearances).toContain(appearance);
+    expect(workerAppearance("worker-a")).toBe(appearance);
   });
 });
