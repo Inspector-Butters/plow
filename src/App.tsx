@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ClassicDashboard } from "./components/ClassicDashboard";
 import { FarmCanvas } from "./components/FarmCanvas";
 import { Inspector } from "./components/Inspector";
 import { ProjectLauncher } from "./components/ProjectLauncher";
@@ -23,7 +24,7 @@ import { workerPosition } from "./lib/layout";
 import { checkForAppUpdate, dismissAppUpdate, installAppUpdate } from "./lib/updater";
 import { attentionFor, groupWorkers } from "./lib/workers";
 import type { AppUpdateInfo } from "./lib/updater";
-import type { MonitorSnapshot, PlowSettings, RepoPlot, Worker } from "./types";
+import type { AgentViewMode, MonitorSnapshot, PlowSettings, RepoPlot, Worker } from "./types";
 import "./styles.css";
 
 function EmptyFarm({ connected }: { connected: boolean }) {
@@ -40,8 +41,8 @@ function EmptyFarm({ connected }: { connected: boolean }) {
 function initialDemoUpdate(): AppUpdateInfo | null {
   if (!import.meta.env.DEV || isNativeApp() || !new URLSearchParams(window.location.search).has("update")) return null;
   return {
-    currentVersion: "0.3.3",
-    version: "0.3.4",
+    currentVersion: "0.3.4",
+    version: "0.3.5",
     date: null,
     notes: "Smoother workers, a sturdier harvest, and a few small fixes around the farm.",
   };
@@ -55,6 +56,7 @@ export default function App() {
   const [launcherOpen, setLauncherOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settings, setSettings] = useState<PlowSettings | null>(null);
+  const [viewSaveError, setViewSaveError] = useState<string | null>(null);
   const [availableUpdate, setAvailableUpdate] = useState<AppUpdateInfo | null>(initialDemoUpdate);
   const notifiedRef = useRef(new Set<string>());
 
@@ -104,10 +106,12 @@ export default function App() {
   }, [snapshot, settings]);
 
   const plots = useMemo(() => groupWorkers(snapshot?.workers ?? []), [snapshot?.workers]);
+  const classicWorkers = useMemo(() => plots.flatMap((plot) => plot.workers), [plots]);
   const selected = snapshot?.workers.find((worker) => worker.id === selectedId) ?? null;
   const attentionCount = snapshot?.workers.filter((worker) => worker.status !== "running").length ?? 0;
   const connected = snapshot?.connection.status === "connected";
   const closeSettings = useCallback(() => setSettingsOpen(false), []);
+  const viewMode = settings?.viewMode ?? "field";
   const connectionLabel = connected
     ? "Connected"
     : snapshot?.connection.status === "missingCodex"
@@ -125,8 +129,23 @@ export default function App() {
     setSelectedId(null);
   };
 
+  const changeViewMode = async (nextMode: AgentViewMode) => {
+    if (!settings || settings.viewMode === nextMode) return;
+    const previous = settings;
+    const next = { ...settings, viewMode: nextMode };
+    setViewSaveError(null);
+    setSettings(next);
+    setListOpen(false);
+    try {
+      await updateSettings(next);
+    } catch (error) {
+      setSettings((current) => current?.viewMode === nextMode ? previous : current);
+      setViewSaveError(error instanceof Error ? error.message : "Could not save the agent view");
+    }
+  };
+
   return (
-    <main className={`${settings?.reducedMotion ? "app app--reduced-motion" : "app"}${(snapshot?.workers.length ?? 0) > 50 ? " app--crowded" : (snapshot?.workers.length ?? 0) > 20 ? " app--dense" : ""}`}>
+    <main className={`${settings?.reducedMotion ? "app app--reduced-motion" : "app"}${viewMode === "classic" ? " app--classic" : ""}${(snapshot?.workers.length ?? 0) > 50 ? " app--crowded" : (snapshot?.workers.length ?? 0) > 20 ? " app--dense" : ""}`}>
       <header className="topbar">
         <div className="brand">
           <img src="/assets/plow-bot.png" alt="" />
@@ -134,6 +153,11 @@ export default function App() {
         </div>
         <div className="topbar__actions">
           {attentionCount > 0 && <span className="attention-pill"><strong>{attentionCount}</strong> need attention</span>}
+          <div className="view-switch" role="group" aria-label="Agent view">
+            <button type="button" className={viewMode === "field" ? "is-active" : ""} aria-pressed={viewMode === "field"} disabled={!settings} onClick={() => void changeViewMode("field")}>Field</button>
+            <button type="button" className={viewMode === "classic" ? "is-active" : ""} aria-pressed={viewMode === "classic"} disabled={!settings} onClick={() => void changeViewMode("classic")}>Classic</button>
+          </div>
+          {viewSaveError && <span className="view-switch__error" role="alert" title={viewSaveError}>View not saved</span>}
           <button type="button" className="button button--primary topbar__start" onClick={() => { setListOpen(false); setLauncherOpen(true); }} disabled={!settings}>Start agent</button>
           <button type="button" className="button button--glass" onClick={() => setListOpen((open) => !open)} aria-expanded={listOpen}>Workers <span>{snapshot?.workers.length ?? 0}</span></button>
           <button type="button" className="button button--glass" onClick={() => setSettingsOpen(true)} disabled={!settings}>Settings</button>
@@ -143,20 +167,32 @@ export default function App() {
         </div>
       </header>
 
-      <section className="farm" aria-label="Codex agent farm">
-        <FarmCanvas />
-        <div className="farm__wash" />
-        {plots.map((plot) => (
-          <FarmPlot
-            key={plot.id}
-            plot={plot}
-            selectedId={selectedId}
-            onSelect={(worker) => setSelectedId(worker.id)}
-          />
-        ))}
-        {snapshot && snapshot.workers.length === 0 && <EmptyFarm connected={connected} />}
-        {!snapshot && <EmptyFarm connected={false} />}
-      </section>
+      {viewMode === "field" ? (
+        <section className="farm" aria-label="Codex agent farm">
+          <FarmCanvas />
+          <div className="farm__wash" />
+          {plots.map((plot) => (
+            <FarmPlot
+              key={plot.id}
+              plot={plot}
+              selectedId={selectedId}
+              onSelect={(worker) => setSelectedId(worker.id)}
+            />
+          ))}
+          {snapshot && snapshot.workers.length === 0 && <EmptyFarm connected={connected} />}
+          {!snapshot && <EmptyFarm connected={false} />}
+        </section>
+      ) : (
+        <ClassicDashboard
+          workers={classicWorkers}
+          connected={connected}
+          selectedId={selectedId}
+          onSelect={(worker) => setSelectedId(worker.id)}
+          onOpen={async (worker) => { await openThread(worker.id, worker.cwd); }}
+          onCopy={async (worker) => { await copyResumeCommand(worker.id, worker.cwd); }}
+          onReviewed={removeReviewed}
+        />
+      )}
 
       {listOpen && <WorkerList plots={plots} selectedId={selectedId} onSelect={(worker) => { setSelectedId(worker.id); setListOpen(false); }} />}
       {launcherOpen && settings && (
@@ -196,8 +232,8 @@ export default function App() {
         />
       )}
       <footer className="farm-footer">
-        <span>{plots.length} field{plots.length === 1 ? "" : "s"}</span>
-        <span className="farm-footer__hint">Select a worker to inspect their thread</span>
+        <span>{viewMode === "field" ? `${plots.length} field${plots.length === 1 ? "" : "s"}` : `${classicWorkers.length} agent${classicWorkers.length === 1 ? "" : "s"}`}</span>
+        <span className="farm-footer__hint">{viewMode === "field" ? "Select a worker to inspect their thread" : "Text-only agent monitor"}</span>
         <span>{snapshot?.connection.message ?? "Starting Plow"}</span>
       </footer>
     </main>

@@ -9,6 +9,7 @@ const settings: PlowSettings = {
   reducedMotion: false,
   codexPath: "",
   developmentHome: "",
+  viewMode: "field",
 };
 
 afterEach(cleanup);
@@ -33,6 +34,18 @@ describe("SettingsPanel", () => {
       codexPath: "/opt/codex/bin/codex",
       developmentHome: "/home/farmer/Developer",
     }));
+  });
+
+  it("saves the classic agent view", async () => {
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    const { getByLabelText, getByRole } = render(
+      <SettingsPanel settings={settings} connection={null} onClose={() => undefined} onSave={onSave} />,
+    );
+
+    fireEvent.change(getByLabelText("Agent view"), { target: { value: "classic" } });
+    fireEvent.click(getByRole("button", { name: "Save settings" }));
+
+    await waitFor(() => expect(onSave).toHaveBeenCalledWith({ ...settings, viewMode: "classic" }));
   });
 
   it("keeps the dialog open and reports path validation errors", async () => {

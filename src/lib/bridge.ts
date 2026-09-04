@@ -88,6 +88,7 @@ export async function loadSettings(): Promise<PlowSettings> {
     reducedMotion: window.matchMedia("(prefers-reduced-motion: reduce)").matches,
     codexPath: "",
     developmentHome: isNativeApp() ? "" : "/home/demo/Developer",
+    viewMode: !isNativeApp() && new URLSearchParams(window.location.search).get("view") === "classic" ? "classic" : "field",
   };
   if (!isNativeApp()) return defaults;
   const { invoke } = await import("@tauri-apps/api/core");

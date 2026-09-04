@@ -51,12 +51,15 @@ export interface ProjectFolder {
   path: string;
 }
 
+export type AgentViewMode = "field" | "classic";
+
 export interface PlowSettings {
   notifyWhenUnfocused: boolean;
   keepInTray: boolean;
   reducedMotion: boolean;
   codexPath: string;
   developmentHome: string;
+  viewMode: AgentViewMode;
 }
 
 export interface AttentionItem {

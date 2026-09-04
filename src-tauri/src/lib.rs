@@ -94,6 +94,14 @@ pub struct PlowSettings {
     pub reduced_motion: bool,
     pub codex_path: String,
     pub development_home: String,
+    pub view_mode: AgentViewMode,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum AgentViewMode {
+    Field,
+    Classic,
 }
 
 impl Default for PlowSettings {
@@ -104,6 +112,7 @@ impl Default for PlowSettings {
             reduced_motion: false,
             codex_path: String::new(),
             development_home: String::new(),
+            view_mode: AgentViewMode::Field,
         }
     }
 }
@@ -452,6 +461,7 @@ mod display_name_tests {
         .expect("legacy settings");
         assert_eq!(settings.codex_path, "");
         assert_eq!(settings.development_home, "");
+        assert!(matches!(settings.view_mode, AgentViewMode::Field));
         assert!(!settings.notify_when_unfocused);
         assert!(settings.reduced_motion);
     }

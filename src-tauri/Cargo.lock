@@ -2733,7 +2733,7 @@ dependencies = [
 
 [[package]]
 name = "plow"
-version = "0.3.4"
+version = "0.3.5"
 dependencies = [
  "serde",
  "serde_json",

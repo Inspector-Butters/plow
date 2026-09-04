@@ -13,6 +13,7 @@ export function SettingsPanel({ settings, connection, onClose, onSave }: Setting
   const [developmentHome, setDevelopmentHome] = useState(settings.developmentHome);
   const [notifyWhenUnfocused, setNotifyWhenUnfocused] = useState(settings.notifyWhenUnfocused);
   const [reducedMotion, setReducedMotion] = useState(settings.reducedMotion);
+  const [viewMode, setViewMode] = useState(settings.viewMode);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -37,6 +38,7 @@ export function SettingsPanel({ settings, connection, onClose, onSave }: Setting
         developmentHome: developmentHome.trim(),
         notifyWhenUnfocused,
         reducedMotion,
+        viewMode,
       });
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason));
@@ -84,6 +86,15 @@ export function SettingsPanel({ settings, connection, onClose, onSave }: Setting
             spellCheck={false}
           />
           <small id="development-home-help">Plow lists the immediate project folders here when you choose Start agent. Enter an absolute folder path.</small>
+        </div>
+
+        <div className="settings-field">
+          <label htmlFor="view-mode">Agent view</label>
+          <select id="view-mode" value={viewMode} onChange={(event) => setViewMode(event.target.value as PlowSettings["viewMode"])}>
+            <option value="field">Field — animated farm</option>
+            <option value="classic">Classic — text and controls</option>
+          </select>
+          <small>Classic view removes the farm artwork and worker animation while keeping every agent action available.</small>
         </div>
 
         {connection && (

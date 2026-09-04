@@ -2,6 +2,8 @@
 
 Plow turns active Codex threads into a small robot farm. Repositories become field plots, top-level threads become lead workers, and sub-agents work nearby. Approval requests, questions, failures, and completed turns are surfaced as calm but unmistakable attention states.
 
+Use **Field** view for the animated farm, or switch to **Classic** for a text-only agent dashboard with direct terminal, copy, review, and detail controls. The selected view is remembered across launches.
+
 ## Install a release
 
 Download the latest build from [GitHub Releases](https://github.com/Inspector-Butters/plow/releases/latest), or use the installer:
