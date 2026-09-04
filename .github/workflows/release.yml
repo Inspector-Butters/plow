@@ -57,6 +57,30 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
+      - name: Prepare updater signing key
+        shell: bash
+        env:
+          PLOW_UPDATER_SIGNING_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          if [[ -z "$PLOW_UPDATER_SIGNING_KEY" ]]; then
+            echo "::error title=Updater signing key missing::Add the TAURI_SIGNING_PRIVATE_KEY repository secret using the contents of the generated key file, not its path."
+            exit 1
+          fi
+
+          key_path="$RUNNER_TEMP/plow-updater.key"
+          probe_path="$RUNNER_TEMP/plow-updater-key-check"
+          printf '%s' "$PLOW_UPDATER_SIGNING_KEY" > "$key_path"
+          chmod 600 "$key_path"
+          : > "$probe_path"
+
+          if ! npm run tauri -- signer sign --private-key-path "$key_path" --password "" "$probe_path"; then
+            echo "::error title=Updater signing key invalid::TAURI_SIGNING_PRIVATE_KEY must contain the generated private key file contents. Replace the repository secret and retry the release."
+            exit 1
+          fi
+
+          echo "TAURI_SIGNING_PRIVATE_KEY=$key_path" >> "$GITHUB_ENV"
+          echo "TAURI_SIGNING_PRIVATE_KEY_PASSWORD=" >> "$GITHUB_ENV"
+
       - name: Verify frontend
         run: |
           npm test
@@ -72,8 +96,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           APPLE_SIGNING_IDENTITY: "-"
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
         with:
           tagName: ${{ github.ref_name }}
           releaseName: "Plow ${{ github.ref_name }}"
