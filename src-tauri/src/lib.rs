@@ -369,6 +369,8 @@ mod display_name_tests {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             let data_dir = app.path().app_data_dir()?;
             let state = Arc::new(SharedState::new(data_dir.join("plow-state.json")));

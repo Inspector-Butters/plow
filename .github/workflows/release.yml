@@ -72,6 +72,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           APPLE_SIGNING_IDENTITY: "-"
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
         with:
           tagName: ${{ github.ref_name }}
           releaseName: "Plow ${{ github.ref_name }}"
@@ -81,4 +83,5 @@ jobs:
             Plow requires a current Codex CLI with managed app-server daemon support.
           releaseDraft: false
           prerelease: false
+          retryAttempts: 3
           args: ${{ matrix.args }}

@@ -3,11 +3,13 @@ import { FarmCanvas } from "./components/FarmCanvas";
 import { Inspector } from "./components/Inspector";
 import { RobotWorker } from "./components/RobotWorker";
 import { SettingsPanel } from "./components/SettingsPanel";
+import { UpdatePrompt } from "./components/UpdatePrompt";
 import { WorkerList } from "./components/WorkerList";
 import {
   copyResumeCommand,
   getSnapshot,
   isWindowFocused,
+  isNativeApp,
   loadSettings,
   markReviewed,
   openThread,
@@ -16,7 +18,9 @@ import {
   updateSettings,
 } from "./lib/bridge";
 import { plotPosition, workerPosition } from "./lib/layout";
+import { checkForAppUpdate, dismissAppUpdate, installAppUpdate } from "./lib/updater";
 import { attentionFor, groupWorkers } from "./lib/workers";
+import type { AppUpdateInfo } from "./lib/updater";
 import type { MonitorSnapshot, PlowSettings, RepoPlot, Worker } from "./types";
 import "./styles.css";
 
@@ -31,12 +35,23 @@ function EmptyFarm({ connected }: { connected: boolean }) {
   );
 }
 
+function initialDemoUpdate(): AppUpdateInfo | null {
+  if (!import.meta.env.DEV || isNativeApp() || !new URLSearchParams(window.location.search).has("update")) return null;
+  return {
+    currentVersion: "0.3.0",
+    version: "0.3.1",
+    date: null,
+    notes: "Smoother workers, a sturdier harvest, and a few small fixes around the farm.",
+  };
+}
+
 export default function App() {
   const [snapshot, setSnapshot] = useState<MonitorSnapshot | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [listOpen, setListOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settings, setSettings] = useState<PlowSettings | null>(null);
+  const [availableUpdate, setAvailableUpdate] = useState<AppUpdateInfo | null>(initialDemoUpdate);
   const notifiedRef = useRef(new Set<string>());
 
   useEffect(() => {
@@ -45,6 +60,16 @@ export default function App() {
     let unlisten: () => void = () => undefined;
     void subscribeToSnapshots((next) => setSnapshot(next)).then((fn) => { unlisten = fn; });
     return () => unlisten();
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
+    void checkForAppUpdate()
+      .then((update) => {
+        if (mounted && update) setAvailableUpdate(update);
+      })
+      .catch((error) => console.warn("Plow could not check for updates", error));
+    return () => { mounted = false; };
   }, []);
 
   useEffect(() => {
@@ -131,6 +156,16 @@ export default function App() {
             setSettings(next);
             closeSettings();
           }}
+        />
+      )}
+      {availableUpdate && (
+        <UpdatePrompt
+          update={availableUpdate}
+          onDismiss={() => {
+            setAvailableUpdate(null);
+            void dismissAppUpdate().catch((error) => console.warn("Plow could not close the update check", error));
+          }}
+          onInstall={installAppUpdate}
         />
       )}
       <footer className="farm-footer">

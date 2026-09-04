@@ -4,6 +4,6 @@ target/
 src-tauri/target/
 .DS_Store
 *.log
+updater.key
 .idea/
 .vscode/
-

@@ -22,7 +22,9 @@ curl -fsSL \
 sh install.sh
 ```
 
-The shorter public installer command works directly if the repository is made public later.
+The shorter installer command works directly with the public repository.
+
+Plow checks the latest GitHub release after launch. When a newer signed build is available, it asks before downloading anything, shows installation progress, and relaunches into the new version. Version 0.3.0 is the first self-updating release, so earlier versions need one final manual install.
 
 On Linux, the installer puts the matching AppImage at `~/.local/bin/plow` (or `$XDG_BIN_HOME/plow`). On macOS, it downloads and opens the DMG for Apple Silicon or Intel; drag Plow into Applications. The GitHub macOS builds are ad-hoc signed rather than notarized, so the first launch may require right-clicking Plow and choosing **Open**, or allowing it in **System Settings → Privacy & Security**.
 
@@ -64,3 +66,15 @@ codex --remote unix://
 V1 is monitor-first. Attention buttons resume the selected thread in a terminal; approvals and conversation continue in Codex itself.
 
 See [AGENTS.md](./AGENTS.md) for architecture, safety constraints, and verification commands.
+
+### Release signing
+
+Self-updates are verified with Tauri's mandatory updater signatures. The public key is embedded in the application; the private key must never be committed. Release maintainers must set the repository Actions secret `TAURI_SIGNING_PRIVATE_KEY` to the contents of the matching private key before pushing a version tag. The release workflow creates and publishes `latest.json` plus the signed Linux and macOS updater bundles.
+
+With GitHub CLI authenticated for the repository, configure that secret without printing the key:
+
+```sh
+gh secret set TAURI_SIGNING_PRIVATE_KEY < /secure/path/to/updater.key
+```
+
+Back up that key securely. Replacing or losing it prevents installed copies from accepting future updates.
