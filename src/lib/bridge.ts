@@ -1,4 +1,4 @@
-import type { MonitorSnapshot, PlowSettings } from "../types";
+import type { MonitorSnapshot, PlowSettings, ProjectFolder } from "../types";
 import { demoSnapshot } from "./mock";
 
 export type Unlisten = () => void;
@@ -35,12 +35,38 @@ export async function openThread(threadId: string, cwd: string): Promise<string>
   return invoke<string>("open_thread", { threadId });
 }
 
+export async function listProjects(): Promise<ProjectFolder[]> {
+  if (!isNativeApp()) {
+    return [
+      { name: "plow", path: "/home/demo/Developer/plow" },
+      { name: "orchard-api", path: "/home/demo/Developer/orchard-api" },
+      { name: "seedling", path: "/home/demo/Developer/seedling" },
+    ];
+  }
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke<ProjectFolder[]>("list_projects");
+}
+
+export async function startAgent(projectPath: string): Promise<string> {
+  if (!isNativeApp()) {
+    const command = startAgentCommand(projectPath);
+    await navigator.clipboard?.writeText(command);
+    return "Browser preview copied the start command";
+  }
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke<string>("start_agent", { projectPath });
+}
+
 function shellQuote(value: string): string {
   return `'${value.replaceAll("'", `'\\''`)}'`;
 }
 
 export function resumeCommand(threadId: string, cwd: string): string {
   return `codex resume ${threadId} --remote unix:// --cd ${shellQuote(cwd)}`;
+}
+
+export function startAgentCommand(cwd: string): string {
+  return `codex --remote unix:// --cd ${shellQuote(cwd)}`;
 }
 
 export async function copyResumeCommand(threadId: string, cwd: string): Promise<void> {
@@ -54,6 +80,7 @@ export async function loadSettings(): Promise<PlowSettings> {
     keepInTray: true,
     reducedMotion: window.matchMedia("(prefers-reduced-motion: reduce)").matches,
     codexPath: "",
+    developmentHome: isNativeApp() ? "" : "/home/demo/Developer",
   };
   if (!isNativeApp()) return defaults;
   const { invoke } = await import("@tauri-apps/api/core");

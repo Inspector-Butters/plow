@@ -1,6 +1,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FarmCanvas } from "./components/FarmCanvas";
 import { Inspector } from "./components/Inspector";
+import { ProjectLauncher } from "./components/ProjectLauncher";
 import { RobotWorker } from "./components/RobotWorker";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { UpdatePrompt } from "./components/UpdatePrompt";
@@ -49,6 +50,7 @@ export default function App() {
   const [snapshot, setSnapshot] = useState<MonitorSnapshot | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [listOpen, setListOpen] = useState(false);
+  const [launcherOpen, setLauncherOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settings, setSettings] = useState<PlowSettings | null>(null);
   const [availableUpdate, setAvailableUpdate] = useState<AppUpdateInfo | null>(initialDemoUpdate);
@@ -115,6 +117,7 @@ export default function App() {
         </div>
         <div className="topbar__actions">
           {attentionCount > 0 && <span className="attention-pill"><strong>{attentionCount}</strong> need attention</span>}
+          <button type="button" className="button button--primary topbar__start" onClick={() => { setListOpen(false); setLauncherOpen(true); }} disabled={!settings}>Start agent</button>
           <button type="button" className="button button--glass" onClick={() => setListOpen((open) => !open)} aria-expanded={listOpen}>Workers <span>{snapshot?.workers.length ?? 0}</span></button>
           <button type="button" className="button button--glass" onClick={() => setSettingsOpen(true)} disabled={!settings}>Settings</button>
           <button type="button" className={`connection connection--${snapshot?.connection.status ?? "connecting"}`} title={snapshot?.connection.message} onClick={() => setSettingsOpen(true)}>
@@ -139,6 +142,13 @@ export default function App() {
       </section>
 
       {listOpen && <WorkerList plots={plots} selectedId={selectedId} onSelect={(worker) => { setSelectedId(worker.id); setListOpen(false); }} />}
+      {launcherOpen && settings && (
+        <ProjectLauncher
+          developmentHome={settings.developmentHome}
+          onClose={() => setLauncherOpen(false)}
+          onOpenSettings={() => { setLauncherOpen(false); setSettingsOpen(true); }}
+        />
+      )}
       <Inspector
         worker={selected}
         onClose={() => setSelectedId(null)}

@@ -10,6 +10,7 @@ interface SettingsPanelProps {
 
 export function SettingsPanel({ settings, connection, onClose, onSave }: SettingsPanelProps) {
   const [codexPath, setCodexPath] = useState(settings.codexPath);
+  const [developmentHome, setDevelopmentHome] = useState(settings.developmentHome);
   const [notifyWhenUnfocused, setNotifyWhenUnfocused] = useState(settings.notifyWhenUnfocused);
   const [reducedMotion, setReducedMotion] = useState(settings.reducedMotion);
   const [saving, setSaving] = useState(false);
@@ -33,6 +34,7 @@ export function SettingsPanel({ settings, connection, onClose, onSave }: Setting
       await onSave({
         ...settings,
         codexPath: codexPath.trim(),
+        developmentHome: developmentHome.trim(),
         notifyWhenUnfocused,
         reducedMotion,
       });
@@ -69,6 +71,21 @@ export function SettingsPanel({ settings, connection, onClose, onSave }: Setting
           The shared daemon requires the standalone Codex installation. An npm or Homebrew executable can run Codex normally but may not be able to start this daemon.
         </div>
 
+        <div className="settings-field">
+          <label htmlFor="development-home">Development home folder</label>
+          <input
+            id="development-home"
+            type="text"
+            value={developmentHome}
+            onChange={(event) => setDevelopmentHome(event.target.value)}
+            placeholder="/home/you/Developer"
+            aria-describedby="development-home-help"
+            autoComplete="off"
+            spellCheck={false}
+          />
+          <small id="development-home-help">Plow lists the immediate project folders here when you choose Start agent. Enter an absolute folder path.</small>
+        </div>
+
         {connection && (
           <div className={`settings-panel__connection settings-panel__connection--${connection.status}`}>
             <strong>Connection: {connection.status}</strong>
@@ -89,7 +106,7 @@ export function SettingsPanel({ settings, connection, onClose, onSave }: Setting
         {error && <p className="settings-panel__error" role="alert">{error}</p>}
         <div className="settings-panel__actions">
           <button className="button button--quiet" type="button" onClick={onClose}>Cancel</button>
-          <button className="button button--primary" type="submit" disabled={saving}>{saving ? "Saving…" : "Save and reconnect"}</button>
+          <button className="button button--primary" type="submit" disabled={saving}>{saving ? "Saving…" : "Save settings"}</button>
         </div>
       </form>
     </div>

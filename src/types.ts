@@ -46,11 +46,17 @@ export interface MonitorSnapshot {
   connection: ConnectionInfo;
 }
 
+export interface ProjectFolder {
+  name: string;
+  path: string;
+}
+
 export interface PlowSettings {
   notifyWhenUnfocused: boolean;
   keepInTray: boolean;
   reducedMotion: boolean;
   codexPath: string;
+  developmentHome: string;
 }
 
 export interface AttentionItem {

@@ -8,6 +8,7 @@ const settings: PlowSettings = {
   keepInTray: true,
   reducedMotion: false,
   codexPath: "",
+  developmentHome: "",
 };
 
 afterEach(cleanup);
@@ -22,11 +23,15 @@ describe("SettingsPanel", () => {
     fireEvent.change(getByLabelText("Codex executable"), {
       target: { value: "  /opt/codex/bin/codex  " },
     });
-    fireEvent.click(getByRole("button", { name: "Save and reconnect" }));
+    fireEvent.change(getByLabelText("Development home folder"), {
+      target: { value: "  /home/farmer/Developer  " },
+    });
+    fireEvent.click(getByRole("button", { name: "Save settings" }));
 
     await waitFor(() => expect(onSave).toHaveBeenCalledWith({
       ...settings,
       codexPath: "/opt/codex/bin/codex",
+      developmentHome: "/home/farmer/Developer",
     }));
   });
 
@@ -36,7 +41,7 @@ describe("SettingsPanel", () => {
       <SettingsPanel settings={settings} connection={null} onClose={() => undefined} onSave={onSave} />,
     );
 
-    fireEvent.click(getByRole("button", { name: "Save and reconnect" }));
+    fireEvent.click(getByRole("button", { name: "Save settings" }));
 
     expect(await findByRole("alert")).toHaveTextContent("No executable Codex file was found");
     expect(getByRole("dialog")).toBeInTheDocument();

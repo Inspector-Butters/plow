@@ -93,6 +93,7 @@ pub struct PlowSettings {
     pub keep_in_tray: bool,
     pub reduced_motion: bool,
     pub codex_path: String,
+    pub development_home: String,
 }
 
 impl Default for PlowSettings {
@@ -102,8 +103,16 @@ impl Default for PlowSettings {
             keep_in_tray: true,
             reduced_motion: false,
             codex_path: String::new(),
+            development_home: String::new(),
         }
     }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectFolder {
+    pub name: String,
+    pub path: String,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -220,6 +229,78 @@ fn open_thread(state: State<'_, Arc<SharedState>>, thread_id: String) -> Result<
     terminal::open_thread(&codex, &thread_id, &cwd)
 }
 
+fn list_project_folders(home: &Path) -> Result<Vec<ProjectFolder>, String> {
+    let mut projects = fs::read_dir(home)
+        .map_err(|error| format!("Could not read {}: {error}", home.display()))?
+        .filter_map(Result::ok)
+        .filter_map(|entry| {
+            let path = entry.path();
+            let name = entry.file_name().to_string_lossy().into_owned();
+            (!name.starts_with('.') && path.is_dir()).then(|| ProjectFolder {
+                name,
+                path: path.to_string_lossy().into_owned(),
+            })
+        })
+        .collect::<Vec<_>>();
+    projects.sort_by_cached_key(|project| project.name.to_lowercase());
+    Ok(projects)
+}
+
+fn validate_project_selection(home: &Path, value: &str) -> Result<PathBuf, String> {
+    let selected = Path::new(value);
+    if !selected.is_absolute() {
+        return Err("The selected project path must be absolute".to_string());
+    }
+    let parent = selected
+        .parent()
+        .ok_or("The selected project has no parent folder")?;
+    let parent = fs::canonicalize(parent)
+        .map_err(|error| format!("Could not open the project's parent folder: {error}"))?;
+    if parent != home {
+        return Err("Choose a project directly inside the configured development home".to_string());
+    }
+    terminal::validate_directory_path(value, "the selected project")
+}
+
+#[tauri::command]
+fn list_projects(state: State<'_, Arc<SharedState>>) -> Result<Vec<ProjectFolder>, String> {
+    let configured = state
+        .persisted
+        .lock()
+        .map_err(|error| error.to_string())?
+        .settings
+        .development_home
+        .clone();
+    if configured.is_empty() {
+        return Err("Set a development home folder in Settings first".to_string());
+    }
+    let home = terminal::validate_directory_path(&configured, "the development home folder")?;
+    list_project_folders(&home)
+}
+
+#[tauri::command]
+fn start_agent(state: State<'_, Arc<SharedState>>, project_path: String) -> Result<String, String> {
+    let configured = state
+        .persisted
+        .lock()
+        .map_err(|error| error.to_string())?
+        .settings
+        .development_home
+        .clone();
+    if configured.is_empty() {
+        return Err("Set a development home folder in Settings first".to_string());
+    }
+    let home = terminal::validate_directory_path(&configured, "the development home folder")?;
+    let project = validate_project_selection(&home, &project_path)?;
+    let codex = state
+        .codex_path
+        .lock()
+        .map_err(|error| error.to_string())?
+        .clone()
+        .ok_or("Codex is not connected")?;
+    terminal::start_agent(&codex, &project)
+}
+
 #[tauri::command]
 fn get_settings(state: State<'_, Arc<SharedState>>) -> Result<PlowSettings, String> {
     Ok(state
@@ -237,8 +318,15 @@ fn update_settings(
     mut settings: PlowSettings,
 ) -> Result<(), String> {
     settings.codex_path = settings.codex_path.trim().to_string();
+    settings.development_home = settings.development_home.trim().to_string();
     if !settings.codex_path.is_empty() {
         terminal::validate_executable_path(&settings.codex_path)?;
+    }
+    if !settings.development_home.is_empty() {
+        terminal::validate_directory_path(
+            &settings.development_home,
+            "the development home folder",
+        )?;
     }
 
     let path_changed = {
@@ -361,6 +449,7 @@ mod display_name_tests {
         }))
         .expect("legacy settings");
         assert_eq!(settings.codex_path, "");
+        assert_eq!(settings.development_home, "");
         assert!(!settings.notify_when_unfocused);
         assert!(settings.reduced_motion);
     }
@@ -415,6 +504,8 @@ pub fn run() {
             get_snapshot,
             mark_reviewed,
             open_thread,
+            list_projects,
+            start_agent,
             get_settings,
             update_settings
         ])
@@ -454,5 +545,27 @@ mod tests {
         let (name, root) = repo_for_cwd("/definitely/not/a/repository/plow");
         assert_eq!(name, "plow");
         assert_eq!(root, "/definitely/not/a/repository/plow");
+    }
+
+    #[test]
+    fn project_listing_only_includes_visible_directories() {
+        let home = std::env::temp_dir().join(format!("plow-projects-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(home.join("Zebra")).unwrap();
+        fs::create_dir_all(home.join("apple")).unwrap();
+        fs::create_dir_all(home.join(".hidden")).unwrap();
+        fs::write(home.join("notes.txt"), b"not a project").unwrap();
+
+        let projects = list_project_folders(&home).unwrap();
+        assert_eq!(
+            projects
+                .iter()
+                .map(|project| project.name.as_str())
+                .collect::<Vec<_>>(),
+            vec!["apple", "Zebra"]
+        );
+        assert!(validate_project_selection(&home, projects[0].path.as_str()).is_ok());
+        assert!(validate_project_selection(&home, "/tmp").is_err());
+
+        fs::remove_dir_all(home).unwrap();
     }
 }

@@ -77,10 +77,11 @@ button { font: inherit; }
 .button:hover, .icon-button:hover { transform: translateY(-1px); background: #fffdf2; }
 .button:active, .icon-button:active { transform: translateY(0) scale(0.98); }
 .button:disabled { cursor: default; opacity: .55; transform: none; }
-.button:focus-visible, .icon-button:focus-visible, .connection:focus-visible, .robot:focus-visible, .worker-list button:focus-visible, .settings-panel input:focus-visible, .update-panel button:focus-visible { outline: 3px solid #fff5a8; outline-offset: 3px; }
+.button:focus-visible, .icon-button:focus-visible, .connection:focus-visible, .robot:focus-visible, .worker-list button:focus-visible, .settings-panel input:focus-visible, .project-launcher button:focus-visible, .update-panel button:focus-visible { outline: 3px solid #fff5a8; outline-offset: 3px; }
 .button--primary { background: var(--lime); border-color: rgba(27, 55, 30, 0.18); box-shadow: 0 5px 16px rgba(58, 89, 48, 0.22); }
 .button--quiet { background: transparent; border-color: rgba(27, 50, 40, 0.16); }
 .button--glass { color: var(--cream); background: var(--glass); backdrop-filter: blur(16px); }
+.button--glass:hover { color: var(--cream); background: rgba(24, 41, 35, .96); }
 .button--glass span { margin-left: 6px; padding: 1px 6px; border-radius: 20px; background: rgba(255,255,255,.13); font-size: 11px; }
 
 .attention-pill {
@@ -481,6 +482,56 @@ button { font: inherit; }
 .settings-panel__error { margin: 12px 0 0; padding: 9px 11px; color: #7d342b; background: #f7d7ce; border-radius: 8px; font-size: 10px; font-weight: 750; }
 .settings-panel__actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 19px; }
 
+.project-backdrop {
+  position: absolute;
+  z-index: 90;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(12, 25, 20, .52);
+  backdrop-filter: blur(8px);
+  animation: settings-backdrop-in .18s ease-out;
+}
+
+.project-launcher {
+  position: relative;
+  width: min(560px, calc(100vw - 48px));
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+  padding: 25px;
+  color: var(--ink);
+  background: rgba(255, 251, 234, .99);
+  border: 1px solid rgba(255,255,255,.82);
+  border-radius: 22px;
+  box-shadow: 0 28px 80px rgba(9, 25, 18, .4), inset 0 1px rgba(255,255,255,.9);
+  animation: settings-panel-in .22s cubic-bezier(.2,.8,.2,1);
+}
+
+.project-launcher__close { position: absolute; right: 13px; top: 13px; width: 35px; min-height: 35px; padding: 0; font-size: 22px; background: rgba(39,62,50,.07); border-color: transparent; }
+.project-launcher__eyebrow { margin: 0 40px 7px 0; color: #708071; font-size: 10px; font-weight: 850; text-transform: uppercase; letter-spacing: .13em; }
+.project-launcher h2 { margin: 0 40px 8px 0; font-size: 24px; letter-spacing: -.025em; }
+.project-launcher__home { margin: 0 0 16px; overflow: hidden; color: #78847b; font: 10px ui-monospace, "SFMono-Regular", Consolas, monospace; text-overflow: ellipsis; white-space: nowrap; }
+.project-launcher__setup, .project-launcher__empty { margin: 18px 0; padding: 20px; color: #59675d; background: rgba(110, 145, 92, .1); border: 1px dashed rgba(57, 88, 52, .25); border-radius: 13px; font-size: 11px; line-height: 1.55; text-align: center; }
+.project-launcher__setup { display: grid; gap: 5px; }
+.project-launcher__setup strong { color: #33483a; font-size: 13px; }
+.project-launcher__loading { display: flex; align-items: center; justify-content: center; gap: 9px; min-height: 105px; color: #68776d; font-size: 11px; font-weight: 750; }
+.project-launcher__loading span { width: 15px; height: 15px; border: 2px solid rgba(66, 99, 61, .2); border-top-color: var(--moss); border-radius: 50%; animation: project-spinner .7s linear infinite; }
+.project-launcher__list { display: grid; gap: 7px; max-height: min(390px, 50vh); overflow: auto; padding: 2px; }
+.project-launcher__list button { display: grid; grid-template-columns: 38px minmax(0, 1fr) 26px; align-items: center; gap: 10px; width: 100%; min-height: 57px; padding: 8px 10px; color: var(--ink); background: #fffdf4; border: 1px solid rgba(39, 63, 50, .14); border-radius: 12px; cursor: pointer; text-align: left; transition: transform 140ms ease, border-color 140ms ease, background 140ms ease, box-shadow 140ms ease; }
+.project-launcher__list button:hover { transform: translateY(-1px); background: #f5f7df; border-color: rgba(64, 102, 55, .32); box-shadow: 0 6px 16px rgba(39, 66, 48, .09); }
+.project-launcher__list button:disabled { cursor: default; opacity: .52; transform: none; }
+.project-launcher__folder { display: grid; place-items: center; width: 36px; height: 34px; color: #684f25; background: #efc766; border-radius: 6px 8px 8px 8px; font-size: 15px; }
+.project-launcher__list button > span:nth-child(2) { min-width: 0; display: grid; gap: 3px; }
+.project-launcher__list strong, .project-launcher__list small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.project-launcher__list strong { font-size: 12px; }
+.project-launcher__list small { color: #829087; font: 9px ui-monospace, "SFMono-Regular", Consolas, monospace; }
+.project-launcher__arrow { color: #6d7d72; font-size: 18px; text-align: center; }
+.project-launcher__message, .project-launcher__error { margin: 12px 0 0; padding: 9px 11px; border-radius: 8px; font-size: 10px; font-weight: 750; }
+.project-launcher__message { color: #3c5c37; background: rgba(173,205,107,.2); }
+.project-launcher__error { color: #7d342b; background: #f7d7ce; }
+.project-launcher__actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+
 .update-backdrop {
   position: absolute;
   z-index: 100;
@@ -755,6 +806,7 @@ button { font: inherit; }
 @keyframes settings-panel-in { from { opacity: 0; transform: translateY(9px) scale(.98); } to { opacity: 1; transform: none; } }
 @keyframes update-panel-in { from { opacity: 0; transform: translateY(14px) scale(.965); } to { opacity: 1; transform: none; } }
 @keyframes update-progress { from { transform: translateX(-110%); } to { transform: translateX(300%); } }
+@keyframes project-spinner { to { transform: rotate(360deg); } }
 
 .app--reduced-motion *, .app--reduced-motion *::before, .app--reduced-motion *::after { animation-duration: 1ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; transition-duration: 1ms !important; }
 

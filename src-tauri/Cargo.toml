@@ -1,6 +1,6 @@
 [package]
 name = "plow"
-version = "0.3.0"
+version = "0.3.1"
 description = "A cozy Codex agent farm monitor"
 authors = ["Plow contributors"]
 edition = "2021"
@@ -20,4 +20,4 @@ tauri-plugin-notification = "2"
 tauri-plugin-process = "2"
 tauri-plugin-updater = "2"
 tungstenite = "0.30"
-uuid = "1"
+uuid = { version = "1", features = ["v4"] }

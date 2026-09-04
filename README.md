@@ -34,6 +34,8 @@ Plow requires a current [Codex CLI](https://learn.chatgpt.com/docs/developer-com
 codex --remote unix://
 ```
 
+To start sessions from Plow, set **Settings → Development home folder** to the absolute path containing your projects. The **Start agent** button lists its immediate subfolders and opens a new shared-daemon Codex session in the selected project.
+
 Plow first looks for the daemon-capable standalone executable at `$CODEX_HOME/packages/standalone/current/codex` (or `~/.codex/packages/standalone/current/codex`), then checks `PATH` and common install locations. You can override detection from **Settings → Codex executable** with an absolute path; changing it reconnects the monitor without restarting Plow.
 
 An npm or Homebrew installation may run the normal Codex CLI but still be unable to start the managed daemon. In that case, install the standalone build and leave Plow on automatic detection:
@@ -43,6 +45,8 @@ curl -fsSL https://chatgpt.com/codex/install.sh | sh
 ```
 
 `CODEX_INSTALL_DIR` changes the user-facing command location, while the standalone package used by the daemon remains under `CODEX_HOME`.
+
+On Linux, terminal handoff supports GNOME Terminal, Console (`kgx`), Ptyxis, Konsole, Xfce Terminal, MATE Terminal, Kitty, WezTerm, Foot, Alacritty, Tilix, LXTerminal, xterm, and the standard desktop terminal launchers. Plow tries another installed terminal when a launcher fails immediately.
 
 ## Development
 
