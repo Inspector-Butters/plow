@@ -40,8 +40,8 @@ function EmptyFarm({ connected }: { connected: boolean }) {
 function initialDemoUpdate(): AppUpdateInfo | null {
   if (!import.meta.env.DEV || isNativeApp() || !new URLSearchParams(window.location.search).has("update")) return null;
   return {
-    currentVersion: "0.3.1",
-    version: "0.3.2",
+    currentVersion: "0.3.2",
+    version: "0.3.3",
     date: null,
     notes: "Smoother workers, a sturdier harvest, and a few small fixes around the farm.",
   };
