@@ -43,10 +43,20 @@ function resetLabel(timestamp: number | null): string {
   return `Resets ${new Date(timestamp * 1000).toLocaleString()}`;
 }
 
+function isVisibleBucket(bucket: RateLimitBucket): boolean {
+  const names = [bucket.limitId, bucket.limitName]
+    .filter((value): value is string => Boolean(value))
+    .map((value) => value.trim().toLowerCase().replace(/[\s_]+/g, "-"));
+  return !names.includes("codex-spark");
+}
+
 export function UsageLimits({ hosts }: UsageLimitsProps) {
-  const windows = hosts.flatMap((host) => host.limits.flatMap((bucket) => windowsFor(host, bucket)));
-  const showHost = hosts.filter((host) => host.limits.length > 0).length > 1;
-  const showBucket = hosts.some((host) => host.limits.length > 1);
+  const visibleHosts = hosts
+    .map((host) => ({ ...host, limits: host.limits.filter(isVisibleBucket) }))
+    .filter((host) => host.limits.length > 0);
+  const windows = visibleHosts.flatMap((host) => host.limits.flatMap((bucket) => windowsFor(host, bucket)));
+  const showHost = visibleHosts.length > 1;
+  const showBucket = visibleHosts.some((host) => host.limits.length > 1);
 
   return (
     <div className="usage-limits" aria-label="Codex usage limits">

@@ -17,4 +17,23 @@ describe("UsageLimits", () => {
     expect(getByLabelText(/5h: 63% left/)).toBeInTheDocument();
     expect(getByLabelText(/Week: 19% left/)).toHaveClass("usage-limit--low");
   });
+
+  it("hides the Codex Spark quota bucket", () => {
+    const hosts = demoSnapshot.rateLimits.map((host) => ({
+      ...host,
+      limits: [
+        ...host.limits,
+        {
+          limitId: "codex_spark",
+          limitName: "Codex Spark",
+          primary: { usedPercent: 91, windowDurationMins: 300, resetsAt: null },
+          secondary: null,
+        },
+      ],
+    }));
+    const { getByLabelText, queryByText } = render(<UsageLimits hosts={hosts} />);
+
+    expect(getByLabelText(/5h: 63% left/)).toBeInTheDocument();
+    expect(queryByText(/spark/i)).not.toBeInTheDocument();
+  });
 });

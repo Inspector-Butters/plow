@@ -42,10 +42,10 @@ function EmptyFarm({ connected }: { connected: boolean }) {
 function initialDemoUpdate(): AppUpdateInfo | null {
   if (!import.meta.env.DEV || isNativeApp() || !new URLSearchParams(window.location.search).has("update")) return null;
   return {
-    currentVersion: "0.4.1",
-    version: "0.4.2",
+    currentVersion: "0.4.2",
+    version: "0.4.3",
     date: null,
-    notes: "Attention shortcuts, context usage, reasoning effort, Codex limits, and click-away panels.",
+    notes: "Keep the limits bar focused on the standard Codex quota windows.",
   };
 }
 
