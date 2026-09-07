@@ -42,10 +42,10 @@ function EmptyFarm({ connected }: { connected: boolean }) {
 function initialDemoUpdate(): AppUpdateInfo | null {
   if (!import.meta.env.DEV || isNativeApp() || !new URLSearchParams(window.location.search).has("update")) return null;
   return {
-    currentVersion: "0.4.2",
-    version: "0.4.3",
+    currentVersion: "0.4.3",
+    version: "0.4.4",
     date: null,
-    notes: "Keep the limits bar focused on the standard Codex quota windows.",
+    notes: "Hide Codex-Spark's separately metered quota from the limits bar.",
   };
 }
 

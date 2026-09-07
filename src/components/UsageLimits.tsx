@@ -47,7 +47,7 @@ function isVisibleBucket(bucket: RateLimitBucket): boolean {
   const names = [bucket.limitId, bucket.limitName]
     .filter((value): value is string => Boolean(value))
     .map((value) => value.trim().toLowerCase().replace(/[\s_]+/g, "-"));
-  return !names.includes("codex-spark");
+  return !names.some((name) => name.includes("codex-spark"));
 }
 
 export function UsageLimits({ hosts }: UsageLimitsProps) {

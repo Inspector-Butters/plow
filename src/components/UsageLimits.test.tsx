@@ -24,8 +24,8 @@ describe("UsageLimits", () => {
       limits: [
         ...host.limits,
         {
-          limitId: "codex_spark",
-          limitName: "Codex Spark",
+          limitId: "codex_bengalfox",
+          limitName: "GPT-5.3-Codex-Spark",
           primary: { usedPercent: 91, windowDurationMins: 300, resetsAt: null },
           secondary: null,
         },
