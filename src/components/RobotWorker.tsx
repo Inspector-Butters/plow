@@ -90,7 +90,10 @@ export function RobotWorker({ worker, selected, x, y, onSelect }: RobotWorkerPro
       type="button"
       aria-label={`${worker.displayName}, ${worker.threadName}, ${statusLabel(worker.status)}, ${activityLabels[worker.activity]}`}
       aria-pressed={selected}
-      onClick={() => onSelect(worker)}
+      onClick={(event) => {
+        event.stopPropagation();
+        onSelect(worker);
+      }}
     >
       <span className="robot__attention" aria-hidden="true">
         <span>{statusIcons[worker.status]}</span>

@@ -17,6 +17,9 @@ export const demoWorkers: Worker[] = [
     cwd: "/Users/demo/dev/plow",
     branch: "feature/farm-ui",
     model: "gpt-5.6-sol",
+    reasoningEffort: "high",
+    contextTokens: 86_240,
+    contextWindow: 400_000,
     source: "cli",
     status: "running",
     activity: "plowing",
@@ -38,6 +41,9 @@ export const demoWorkers: Worker[] = [
     cwd: "/Users/demo/dev/plow",
     branch: "feature/farm-ui",
     model: "gpt-5.6-luna",
+    reasoningEffort: "medium",
+    contextTokens: 214_500,
+    contextWindow: 400_000,
     source: "subAgent",
     status: "waitingApproval",
     activity: "watering",
@@ -59,6 +65,9 @@ export const demoWorkers: Worker[] = [
     cwd: "/Users/demo/dev/prysm/beacon-chain",
     branch: "state-diff-cache",
     model: "gpt-5.6-sol",
+    reasoningEffort: "xhigh",
+    contextTokens: 361_200,
+    contextWindow: 400_000,
     source: "vscode",
     status: "waitingInput",
     activity: "planting",
@@ -80,6 +89,9 @@ export const demoWorkers: Worker[] = [
     cwd: "/Users/demo/dev/consensus-specs",
     branch: "master",
     model: "gpt-5.6-sol",
+    reasoningEffort: "high",
+    contextTokens: 145_800,
+    contextWindow: 400_000,
     source: "cli",
     status: "completed",
     activity: "harvesting",
@@ -101,6 +113,9 @@ export const demoWorkers: Worker[] = [
     cwd: "/Users/demo/dev/infra",
     branch: "hoodi",
     model: "gpt-5.6-terra",
+    reasoningEffort: "low",
+    contextTokens: 72_100,
+    contextWindow: 400_000,
     source: "cli",
     status: "failed",
     activity: "carrying",
@@ -112,6 +127,18 @@ export const demoWorkers: Worker[] = [
 
 export const demoSnapshot: MonitorSnapshot = {
   workers: demoWorkers,
+  rateLimits: [
+    {
+      hostId: "local",
+      hostLabel: "This computer",
+      limits: [{
+        limitId: "codex",
+        limitName: null,
+        primary: { usedPercent: 37, windowDurationMins: 300, resetsAt: now + 6_420 },
+        secondary: { usedPercent: 81, windowDurationMins: 10_080, resetsAt: now + 345_600 },
+      }],
+    },
+  ],
   connections: [
     {
       hostId: "local",

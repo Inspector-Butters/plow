@@ -17,6 +17,16 @@ const settings: PlowSettings = {
 afterEach(cleanup);
 
 describe("SettingsPanel", () => {
+  it("closes when its backdrop is clicked", () => {
+    const onClose = vi.fn();
+    const { container } = render(
+      <SettingsPanel settings={settings} connection={[]} onClose={onClose} onSave={vi.fn()} />,
+    );
+
+    fireEvent.mouseDown(container.querySelector(".settings-backdrop")!);
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
   it("saves a trimmed Codex executable path", async () => {
     const onSave = vi.fn().mockResolvedValue(undefined);
     const { getByLabelText, getByRole } = render(

@@ -59,7 +59,9 @@ export function ProjectLauncher({ locations, onClose, onOpenSettings }: ProjectL
   };
 
   return (
-    <div className="project-backdrop">
+    <div className="project-backdrop" onMouseDown={(event) => {
+      if (event.target === event.currentTarget && !startingPath) onClose();
+    }}>
       <section className="project-launcher" role="dialog" aria-modal="true" aria-labelledby="project-launcher-title">
         <button ref={closeRef} className="icon-button project-launcher__close" type="button" onClick={onClose} aria-label="Close project picker" disabled={Boolean(startingPath)}>×</button>
         <p className="project-launcher__eyebrow">New Codex session</p>

@@ -22,6 +22,9 @@ export interface Worker {
   cwd: string;
   branch: string | null;
   model: string | null;
+  reasoningEffort: string | null;
+  contextTokens: number | null;
+  contextWindow: number | null;
   source: string;
   status: WorkerStatus;
   activity: FarmActivity;
@@ -52,6 +55,26 @@ export interface ConnectionInfo {
 export interface MonitorSnapshot {
   workers: Worker[];
   connections: ConnectionInfo[];
+  rateLimits: HostRateLimits[];
+}
+
+export interface RateLimitWindow {
+  usedPercent: number;
+  windowDurationMins: number | null;
+  resetsAt: number | null;
+}
+
+export interface RateLimitBucket {
+  limitId: string;
+  limitName: string | null;
+  primary: RateLimitWindow | null;
+  secondary: RateLimitWindow | null;
+}
+
+export interface HostRateLimits {
+  hostId: string;
+  hostLabel: string;
+  limits: RateLimitBucket[];
 }
 
 export interface ProjectFolder {

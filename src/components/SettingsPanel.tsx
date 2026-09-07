@@ -72,7 +72,9 @@ export function SettingsPanel({ settings, connection, onClose, onSave }: Setting
   };
 
   return (
-    <div className="settings-backdrop">
+    <div className="settings-backdrop" onMouseDown={(event) => {
+      if (event.target === event.currentTarget && !saving) onClose();
+    }}>
       <form className="settings-panel" role="dialog" aria-modal="true" aria-labelledby="settings-title" onSubmit={(event) => void submit(event)}>
         <button className="icon-button settings-panel__close" type="button" onClick={onClose} aria-label="Close settings">×</button>
         <p className="settings-panel__eyebrow">Connections</p>

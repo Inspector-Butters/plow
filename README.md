@@ -4,6 +4,8 @@ Plow turns active Codex threads into a small robot farm. Repositories become fie
 
 Use **Field** view for the animated farm, or switch to **Classic** for a text-only agent dashboard with direct terminal, copy, review, and detail controls. The selected view is remembered across launches.
 
+Click **need attention** to see every agent waiting for approval or input, plus completed and failed work, with direct terminal and copy-command actions. Clicking the field closes agent details and other open overlays. Agent details show the configured model and reasoning effort, live context-window usage, and the bottom-left status bar shows account rate limits with stronger warnings as a limit runs low. These values appear when the connected Codex app-server and account expose them; rate limits require ChatGPT-backed authentication.
+
 ## Install a release
 
 Download the latest build from [GitHub Releases](https://github.com/Inspector-Butters/plow/releases/latest), or use the installer:

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { Worker } from "../types";
-import { elapsedLabel, statusLabel } from "../lib/workers";
+import { elapsedLabel, modelLabel, statusLabel } from "../lib/workers";
 
 interface ClassicDashboardProps {
   workers: Worker[];
@@ -10,9 +10,10 @@ interface ClassicDashboardProps {
   onOpen: (worker: Worker) => Promise<void>;
   onCopy: (worker: Worker) => Promise<void>;
   onReviewed: (worker: Worker) => Promise<void>;
+  onDismiss: () => void;
 }
 
-export function ClassicDashboard({ workers, connected, selectedId, onSelect, onOpen, onCopy, onReviewed }: ClassicDashboardProps) {
+export function ClassicDashboard({ workers, connected, selectedId, onSelect, onOpen, onCopy, onReviewed, onDismiss }: ClassicDashboardProps) {
   const [messages, setMessages] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
 
@@ -34,7 +35,7 @@ export function ClassicDashboard({ workers, connected, selectedId, onSelect, onO
   };
 
   return (
-    <section className="classic-dashboard" aria-label="Codex agents">
+    <section className="classic-dashboard" aria-label="Codex agents" onClick={onDismiss}>
       <header className="classic-dashboard__header">
         <div>
           <p>Classic view</p>
@@ -59,7 +60,7 @@ export function ClassicDashboard({ workers, connected, selectedId, onSelect, onO
             const copyKey = `${worker.id}:copy`;
             const reviewKey = `${worker.id}:review`;
             return (
-              <article className={`classic-agent${selectedId === worker.id ? " classic-agent--selected" : ""}`} key={worker.id}>
+              <article className={`classic-agent${selectedId === worker.id ? " classic-agent--selected" : ""}`} key={worker.id} onClick={(event) => event.stopPropagation()}>
                 <div className="classic-agent__identity">
                   <strong>{worker.displayName}</strong>
                   <small>{worker.hostLabel}{worker.hostKind === "ssh" ? " · SSH" : ""} · {worker.parentId ? "Crew member" : "Lead agent"}</small>
@@ -74,7 +75,7 @@ export function ClassicDashboard({ workers, connected, selectedId, onSelect, onO
                 </div>
                 <div className="classic-agent__runtime">
                   <strong>{elapsedLabel(worker)}</strong>
-                  <small>{worker.model ?? worker.source}</small>
+                  <small>{modelLabel(worker) ?? worker.source}</small>
                 </div>
                 <div className="classic-agent__actions">
                   <button className="button button--primary" type="button" disabled={busy === openKey} onClick={() => void run(worker, "open", () => onOpen(worker), "Opening Codex…")}>Open terminal</button>

@@ -59,7 +59,9 @@ export function UpdatePrompt({ update, onDismiss, onInstall }: UpdatePromptProps
         : `Downloading update… ${percent}%`;
 
   return (
-    <div className="update-backdrop">
+    <div className="update-backdrop" onMouseDown={(event) => {
+      if (event.target === event.currentTarget && !busy) onDismiss();
+    }}>
       <section className="update-panel" role="dialog" aria-modal="true" aria-labelledby="update-title" aria-describedby="update-description">
         <div className="update-panel__icon" aria-hidden="true">↻</div>
         <p className="update-panel__eyebrow">Plow update</p>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { attentionFor, groupWorkers, statusLabel } from "./workers";
+import { attentionFor, contextLabel, groupWorkers, modelLabel, statusLabel } from "./workers";
 import { demoWorkers } from "./mock";
 
 describe("worker presentation", () => {
@@ -25,5 +25,11 @@ describe("worker presentation", () => {
     const approval = demoWorkers.find((worker) => worker.status === "waitingApproval");
     expect(approval && attentionFor(approval)).toMatchObject({ kind: "approval", key: "demo-approval" });
     expect(statusLabel("completed")).toBe("Ready for review");
+  });
+
+  it("shows the model variant and current context usage when available", () => {
+    expect(modelLabel(demoWorkers[0])).toBe("gpt-5.6-sol · high");
+    expect(contextLabel(demoWorkers[0])).toBe("86k / 400k (22%)");
+    expect(contextLabel({ ...demoWorkers[0], contextTokens: null })).toBeNull();
   });
 });

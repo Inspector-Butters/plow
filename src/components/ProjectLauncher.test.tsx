@@ -21,6 +21,17 @@ afterEach(() => {
 });
 
 describe("ProjectLauncher", () => {
+  it("closes when its backdrop is clicked", () => {
+    vi.mocked(listProjects).mockResolvedValue([]);
+    const onClose = vi.fn();
+    const { container } = render(
+      <ProjectLauncher locations={[localLocation]} onClose={onClose} onOpenSettings={() => undefined} />,
+    );
+
+    fireEvent.mouseDown(container.querySelector(".project-backdrop")!);
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
   it("starts a general session in the development home", async () => {
     vi.mocked(listProjects).mockResolvedValue([{ name: "plow", path: "/home/farmer/Developer/plow" }]);
     vi.mocked(startAgent).mockResolvedValue("Opening Codex");

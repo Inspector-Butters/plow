@@ -67,3 +67,20 @@ export function elapsedLabel(worker: Worker, now = Date.now()): string {
   if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
   return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`;
 }
+
+export function modelLabel(worker: Worker): string | null {
+  if (!worker.model) return null;
+  return worker.reasoningEffort ? `${worker.model} · ${worker.reasoningEffort}` : worker.model;
+}
+
+function compactTokens(tokens: number): string {
+  if (tokens < 1_000) return String(tokens);
+  if (tokens < 1_000_000) return `${(tokens / 1_000).toFixed(tokens < 10_000 ? 1 : 0)}k`;
+  return `${(tokens / 1_000_000).toFixed(1)}m`;
+}
+
+export function contextLabel(worker: Worker): string | null {
+  if (worker.contextTokens === null || worker.contextWindow === null || worker.contextWindow <= 0) return null;
+  const percent = Math.min(100, Math.round((worker.contextTokens / worker.contextWindow) * 100));
+  return `${compactTokens(worker.contextTokens)} / ${compactTokens(worker.contextWindow)} (${percent}%)`;
+}

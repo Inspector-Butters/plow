@@ -60,12 +60,43 @@ pub struct Worker {
     pub cwd: String,
     pub branch: Option<String>,
     pub model: Option<String>,
+    #[serde(default)]
+    pub reasoning_effort: Option<String>,
+    #[serde(default)]
+    pub context_tokens: Option<u64>,
+    #[serde(default)]
+    pub context_window: Option<u64>,
     pub source: String,
     pub status: WorkerStatus,
     pub activity: FarmActivity,
     pub updated_at: i64,
     pub started_at: Option<i64>,
     pub attention_id: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RateLimitWindow {
+    pub used_percent: f64,
+    pub window_duration_mins: Option<u64>,
+    pub resets_at: Option<i64>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RateLimitBucket {
+    pub limit_id: String,
+    pub limit_name: Option<String>,
+    pub primary: Option<RateLimitWindow>,
+    pub secondary: Option<RateLimitWindow>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HostRateLimits {
+    pub host_id: String,
+    pub host_label: String,
+    pub limits: Vec<RateLimitBucket>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -103,6 +134,7 @@ pub struct ConnectionInfo {
 pub struct MonitorSnapshot {
     pub workers: Vec<Worker>,
     pub connections: Vec<ConnectionInfo>,
+    pub rate_limits: Vec<HostRateLimits>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -203,6 +235,7 @@ impl SharedState {
             snapshot: Mutex::new(MonitorSnapshot {
                 workers: attention,
                 connections: Vec::new(),
+                rate_limits: Vec::new(),
             }),
             persisted: Mutex::new(persisted),
             storage_path,

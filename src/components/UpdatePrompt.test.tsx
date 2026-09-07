@@ -13,6 +13,16 @@ const update: AppUpdateInfo = {
 afterEach(cleanup);
 
 describe("UpdatePrompt", () => {
+  it("closes when its backdrop is clicked", () => {
+    const onDismiss = vi.fn();
+    const { container } = render(
+      <UpdatePrompt update={update} onDismiss={onDismiss} onInstall={vi.fn()} />,
+    );
+
+    fireEvent.mouseDown(container.querySelector(".update-backdrop")!);
+    expect(onDismiss).toHaveBeenCalledOnce();
+  });
+
   it("explains the available version and can defer it", () => {
     const onDismiss = vi.fn();
     const { getByRole, getByText } = render(

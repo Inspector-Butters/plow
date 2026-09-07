@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { Worker } from "../types";
-import { elapsedLabel, statusLabel } from "../lib/workers";
+import { contextLabel, elapsedLabel, modelLabel, statusLabel } from "../lib/workers";
 
 interface InspectorProps {
   worker: Worker | null;
@@ -17,6 +17,7 @@ export function Inspector({ worker, onClose, onOpen, onReviewed, onCopy }: Inspe
 
   if (!worker) return null;
   const canReview = worker.attentionId && (worker.status === "completed" || worker.status === "failed");
+  const context = contextLabel(worker);
 
   const run = async (action: () => Promise<void>, success: string) => {
     setMessage("");
@@ -44,7 +45,8 @@ export function Inspector({ worker, onClose, onOpen, onReviewed, onCopy }: Inspe
         {worker.branch && <div><dt>Branch</dt><dd>{worker.branch}</dd></div>}
         <div><dt>Job</dt><dd>{worker.activity}</dd></div>
         <div><dt>Elapsed</dt><dd>{elapsedLabel(worker)}</dd></div>
-        {worker.model && <div><dt>Model</dt><dd>{worker.model}</dd></div>}
+        {worker.model && <div><dt>Model</dt><dd>{modelLabel(worker)}</dd></div>}
+        {context && <div><dt>Context</dt><dd>{context}</dd></div>}
         <div><dt>Source</dt><dd>{worker.source}</dd></div>
       </dl>
 

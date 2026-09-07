@@ -1,11 +1,13 @@
-import { render } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { cleanup, fireEvent, render } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { demoWorkers } from "../lib/mock";
 import { workerAppearance } from "../lib/layout";
 import type { FarmActivity } from "../types";
 import { RobotWorker } from "./RobotWorker";
 
 const activities: FarmActivity[] = ["plowing", "watering", "planting", "harvesting", "carrying"];
+
+afterEach(cleanup);
 
 describe("RobotWorker", () => {
   it.each(activities)("renders a distinct %s work scene", (activity) => {
@@ -36,5 +38,19 @@ describe("RobotWorker", () => {
     expect(container.querySelector("button")).toHaveAttribute("data-appearance", workerAppearance(worker.id));
     rerender(<RobotWorker worker={worker} selected x={60} y={55} onSelect={() => undefined} />);
     expect(container.querySelector("button")).toHaveAttribute("data-appearance", workerAppearance(worker.id));
+  });
+
+  it("selects the worker without triggering the field's dismiss click", () => {
+    const onSelect = vi.fn();
+    const onFieldClick = vi.fn();
+    const { getByRole } = render(
+      <div onClick={onFieldClick}>
+        <RobotWorker worker={demoWorkers[0]} selected={false} x={50} y={50} onSelect={onSelect} />
+      </div>,
+    );
+
+    fireEvent.click(getByRole("button"));
+    expect(onSelect).toHaveBeenCalledWith(demoWorkers[0]);
+    expect(onFieldClick).not.toHaveBeenCalled();
   });
 });

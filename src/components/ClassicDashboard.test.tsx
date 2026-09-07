@@ -19,6 +19,7 @@ describe("ClassicDashboard", () => {
         onOpen={onOpen}
         onCopy={onCopy}
         onReviewed={vi.fn().mockResolvedValue(undefined)}
+        onDismiss={vi.fn()}
       />,
     );
 
@@ -46,10 +47,30 @@ describe("ClassicDashboard", () => {
         onOpen={vi.fn().mockResolvedValue(undefined)}
         onCopy={vi.fn().mockResolvedValue(undefined)}
         onReviewed={onReviewed}
+        onDismiss={vi.fn()}
       />,
     );
 
     fireEvent.click(getByRole("button", { name: "Mark reviewed" }));
     await waitFor(() => expect(onReviewed).toHaveBeenCalledWith(worker));
+  });
+
+  it("dismisses floating details when its background is clicked", () => {
+    const onDismiss = vi.fn();
+    const { getByRole } = render(
+      <ClassicDashboard
+        workers={[]}
+        connected
+        selectedId="selected"
+        onSelect={() => undefined}
+        onOpen={vi.fn().mockResolvedValue(undefined)}
+        onCopy={vi.fn().mockResolvedValue(undefined)}
+        onReviewed={vi.fn().mockResolvedValue(undefined)}
+        onDismiss={onDismiss}
+      />,
+    );
+
+    fireEvent.click(getByRole("region", { name: "Codex agents" }));
+    expect(onDismiss).toHaveBeenCalledOnce();
   });
 });

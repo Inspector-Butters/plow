@@ -1,6 +1,7 @@
 use crate::{
     activity_for, display_name_for_cwd, emit_snapshot, remote, repo_for_cwd, ConnectionInfo,
-    ConnectionStatus, HostKind, PlowSettings, SharedState, SshHostSettings, Worker, WorkerStatus,
+    ConnectionStatus, HostKind, HostRateLimits, PlowSettings, RateLimitBucket, RateLimitWindow,
+    SharedState, SshHostSettings, Worker, WorkerStatus,
 };
 use serde_json::{json, Value};
 use std::{
@@ -15,6 +16,12 @@ use std::{
 };
 use tauri::AppHandle;
 use tungstenite::{client, Error as WebSocketError, Message, WebSocket};
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum PendingRequest {
+    ThreadList,
+    RateLimits,
+}
 
 pub trait HostTransport: Send + Sync {
     fn host_id(&self) -> String;
@@ -237,6 +244,7 @@ fn prepare_hosts(app: &AppHandle, state: &Arc<SharedState>, settings: &PlowSetti
                 )
         });
         snapshot.connections = connections;
+        snapshot.rate_limits.clear();
     }
     {
         let mut persisted = state.persisted.lock().expect("persisted lock");
@@ -393,6 +401,8 @@ fn monitor_socket<S: Read + Write>(
     let mut initialized = false;
     let mut request_id = 2_u64;
     let mut next_poll = Instant::now();
+    let mut next_limits_poll = Instant::now();
+    let mut pending = HashMap::new();
     let mut repo_cache = HashMap::new();
 
     loop {
@@ -400,11 +410,12 @@ fn monitor_socket<S: Read + Write>(
             return Ok(());
         }
         if initialized && Instant::now() >= next_poll {
+            let id = request_id;
             write_message(
                 &mut socket,
                 &json!({
                     "method": "thread/list",
-                    "id": request_id,
+                    "id": id,
                     "params": {
                         "limit": 500,
                         "sortKey": "updated_at",
@@ -415,8 +426,22 @@ fn monitor_socket<S: Read + Write>(
                     }
                 }),
             )?;
+            pending.insert(id, PendingRequest::ThreadList);
             request_id += 1;
             next_poll = Instant::now() + Duration::from_secs(2);
+        }
+        if initialized && Instant::now() >= next_limits_poll {
+            let id = request_id;
+            write_message(
+                &mut socket,
+                &json!({
+                    "method": "account/rateLimits/read",
+                    "id": id
+                }),
+            )?;
+            pending.insert(id, PendingRequest::RateLimits);
+            request_id += 1;
+            next_limits_poll = Instant::now() + Duration::from_secs(300);
         }
 
         match socket.read() {
@@ -448,10 +473,18 @@ fn monitor_socket<S: Read + Write>(
                         },
                     );
                     next_poll = Instant::now();
+                    next_limits_poll = Instant::now();
                     continue;
                 }
 
+                let response_kind = message
+                    .get("id")
+                    .and_then(Value::as_u64)
+                    .and_then(|id| pending.remove(&id));
                 if let Some(error) = message.get("error") {
+                    if response_kind == Some(PendingRequest::RateLimits) {
+                        continue;
+                    }
                     let text = error
                         .get("message")
                         .and_then(Value::as_str)
@@ -469,10 +502,24 @@ fn monitor_socket<S: Read + Write>(
                     continue;
                 }
 
-                if let Some(data) = message.pointer("/result/data").and_then(Value::as_array) {
-                    reconcile_threads(data, transport, state, &mut repo_cache);
-                    emit_snapshot(app, state);
-                    continue;
+                match response_kind {
+                    Some(PendingRequest::ThreadList) => {
+                        if let Some(data) =
+                            message.pointer("/result/data").and_then(Value::as_array)
+                        {
+                            reconcile_threads(data, transport, state, &mut repo_cache);
+                            emit_snapshot(app, state);
+                        }
+                        continue;
+                    }
+                    Some(PendingRequest::RateLimits) => {
+                        if let Some(result) = message.get("result") {
+                            update_rate_limits(result, transport, state);
+                            emit_snapshot(app, state);
+                        }
+                        continue;
+                    }
+                    None => {}
                 }
 
                 if let Some(method) = message.get("method").and_then(Value::as_str) {
@@ -736,7 +783,15 @@ fn normalize_worker(
         model: thread
             .get("model")
             .and_then(Value::as_str)
-            .map(str::to_string),
+            .map(str::to_string)
+            .or_else(|| previous.and_then(|worker| worker.model.clone())),
+        reasoning_effort: thread
+            .get("reasoningEffort")
+            .and_then(Value::as_str)
+            .map(str::to_string)
+            .or_else(|| previous.and_then(|worker| worker.reasoning_effort.clone())),
+        context_tokens: previous.and_then(|worker| worker.context_tokens),
+        context_window: previous.and_then(|worker| worker.context_window),
         source: source_label(thread.get("source")),
         status,
         activity: activity_for(&id),
@@ -773,6 +828,14 @@ fn handle_notification(
     state: &Arc<SharedState>,
 ) {
     let Some(params) = params else { return };
+    if method == "thread/tokenUsage/updated" {
+        update_thread_token_usage(params, transport, state);
+        return;
+    }
+    if method == "account/rateLimits/updated" {
+        merge_rate_limit_update(params, transport, state);
+        return;
+    }
     if method != "turn/completed" {
         return;
     }
@@ -828,6 +891,163 @@ fn handle_notification(
     let _ = state.save();
 }
 
+fn update_thread_token_usage(
+    params: &Value,
+    transport: &dyn HostTransport,
+    state: &Arc<SharedState>,
+) {
+    let Some(thread_id) = params.get("threadId").and_then(Value::as_str) else {
+        return;
+    };
+    let (context_tokens, context_window) = token_context(params);
+    if context_tokens.is_none() && context_window.is_none() {
+        return;
+    }
+    if let Some(worker) = state
+        .snapshot
+        .lock()
+        .expect("snapshot lock")
+        .workers
+        .iter_mut()
+        .find(|worker| worker.host_id == transport.host_id() && worker.thread_id == thread_id)
+    {
+        if context_tokens.is_some() {
+            worker.context_tokens = context_tokens;
+        }
+        if context_window.is_some() {
+            worker.context_window = context_window;
+        }
+    }
+}
+
+fn token_context(params: &Value) -> (Option<u64>, Option<u64>) {
+    (
+        params
+            .pointer("/tokenUsage/last/totalTokens")
+            .and_then(Value::as_u64),
+        params
+            .pointer("/tokenUsage/modelContextWindow")
+            .and_then(Value::as_u64),
+    )
+}
+
+fn update_rate_limits(result: &Value, transport: &dyn HostTransport, state: &Arc<SharedState>) {
+    let mut limits = result
+        .get("rateLimitsByLimitId")
+        .and_then(Value::as_object)
+        .map(|values| {
+            values
+                .iter()
+                .filter_map(|(id, value)| normalize_rate_limit_bucket(value, id))
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    if limits.is_empty() {
+        if let Some(limit) = result
+            .get("rateLimits")
+            .and_then(|value| normalize_rate_limit_bucket(value, "codex"))
+        {
+            limits.push(limit);
+        }
+    }
+    limits.sort_by(|left, right| left.limit_id.cmp(&right.limit_id));
+
+    let host_id = transport.host_id();
+    let mut snapshot = state.snapshot.lock().expect("snapshot lock");
+    snapshot
+        .rate_limits
+        .retain(|existing| existing.host_id != host_id);
+    if !limits.is_empty() {
+        snapshot.rate_limits.push(HostRateLimits {
+            host_id,
+            host_label: transport.host_label(),
+            limits,
+        });
+        snapshot
+            .rate_limits
+            .sort_by(|left, right| left.host_label.cmp(&right.host_label));
+    }
+}
+
+fn merge_rate_limit_update(
+    params: &Value,
+    transport: &dyn HostTransport,
+    state: &Arc<SharedState>,
+) {
+    let Some(incoming) = params
+        .get("rateLimits")
+        .and_then(|value| normalize_rate_limit_bucket(value, "codex"))
+    else {
+        return;
+    };
+    let host_id = transport.host_id();
+    let mut snapshot = state.snapshot.lock().expect("snapshot lock");
+    if let Some(host) = snapshot
+        .rate_limits
+        .iter_mut()
+        .find(|host| host.host_id == host_id)
+    {
+        if let Some(existing) = host
+            .limits
+            .iter_mut()
+            .find(|limit| limit.limit_id == incoming.limit_id)
+        {
+            if incoming.limit_name.is_some() {
+                existing.limit_name = incoming.limit_name;
+            }
+            if incoming.primary.is_some() {
+                existing.primary = incoming.primary;
+            }
+            if incoming.secondary.is_some() {
+                existing.secondary = incoming.secondary;
+            }
+        } else {
+            host.limits.push(incoming);
+            host.limits
+                .sort_by(|left, right| left.limit_id.cmp(&right.limit_id));
+        }
+    } else {
+        snapshot.rate_limits.push(HostRateLimits {
+            host_id,
+            host_label: transport.host_label(),
+            limits: vec![incoming],
+        });
+        snapshot
+            .rate_limits
+            .sort_by(|left, right| left.host_label.cmp(&right.host_label));
+    }
+}
+
+fn normalize_rate_limit_bucket(value: &Value, fallback_id: &str) -> Option<RateLimitBucket> {
+    let primary = value.get("primary").and_then(normalize_rate_limit_window);
+    let secondary = value.get("secondary").and_then(normalize_rate_limit_window);
+    if primary.is_none() && secondary.is_none() {
+        return None;
+    }
+    Some(RateLimitBucket {
+        limit_id: value
+            .get("limitId")
+            .and_then(Value::as_str)
+            .unwrap_or(fallback_id)
+            .to_string(),
+        limit_name: value
+            .get("limitName")
+            .and_then(Value::as_str)
+            .filter(|name| !name.is_empty())
+            .map(str::to_string),
+        primary,
+        secondary,
+    })
+}
+
+fn normalize_rate_limit_window(value: &Value) -> Option<RateLimitWindow> {
+    Some(RateLimitWindow {
+        used_percent: value.get("usedPercent")?.as_f64()?.clamp(0.0, 100.0),
+        window_duration_mins: value.get("windowDurationMins").and_then(Value::as_u64),
+        resets_at: value.get("resetsAt").and_then(Value::as_i64),
+    })
+}
+
 fn has_flag(flags: Option<&Vec<Value>>, target: &str) -> bool {
     flags.is_some_and(|values| values.iter().any(|value| value.as_str() == Some(target)))
 }
@@ -874,6 +1094,7 @@ fn update_connection_fields(
     codex_path: Option<String>,
     message: &str,
 ) {
+    let connected = matches!(status, ConnectionStatus::Connected);
     let connection = ConnectionInfo {
         host_id: host_id.to_string(),
         host_label: host_label.to_string(),
@@ -892,6 +1113,11 @@ fn update_connection_fields(
         *existing = connection;
     } else {
         return;
+    }
+    if !connected {
+        snapshot
+            .rate_limits
+            .retain(|limits| limits.host_id != host_id);
     }
     drop(snapshot);
     emit_snapshot(app, state);
@@ -1013,6 +1239,8 @@ mod tests {
         let thread = json!({
             "id": "019f5ade-99ad-7ed1-b2f3-159136634cf7",
             "cwd": "/srv/projects/plow/frontend",
+            "model": "gpt-5.6-sol",
+            "reasoningEffort": "high",
             "status": { "type": "active", "activeFlags": [] }
         });
         let transport = LocalDaemonTransport::new(PathBuf::from("/bin/true"), 0);
@@ -1021,6 +1249,32 @@ mod tests {
         assert_ne!(worker.repo_name, "unknown");
         assert_eq!(worker.thread_id, "019f5ade-99ad-7ed1-b2f3-159136634cf7");
         assert_eq!(worker.host_id, "local");
+        assert_eq!(worker.model.as_deref(), Some("gpt-5.6-sol"));
+        assert_eq!(worker.reasoning_effort.as_deref(), Some("high"));
+    }
+
+    #[test]
+    fn normalizes_context_and_account_limit_usage() {
+        let usage = json!({
+            "tokenUsage": {
+                "last": { "totalTokens": 86420 },
+                "modelContextWindow": 400000
+            }
+        });
+        assert_eq!(token_context(&usage), (Some(86_420), Some(400_000)));
+
+        let limit = normalize_rate_limit_bucket(
+            &json!({
+                "limitId": "codex",
+                "primary": { "usedPercent": 24.5, "windowDurationMins": 300, "resetsAt": 1788800000 },
+                "secondary": { "usedPercent": 72, "windowDurationMins": 10080, "resetsAt": 1789000000 }
+            }),
+            "fallback",
+        )
+        .unwrap();
+        assert_eq!(limit.limit_id, "codex");
+        assert_eq!(limit.primary.unwrap().used_percent, 24.5);
+        assert_eq!(limit.secondary.unwrap().window_duration_mins, Some(10_080));
     }
 
     #[test]

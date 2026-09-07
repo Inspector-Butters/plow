@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AttentionList } from "./components/AttentionList";
 import { ClassicDashboard } from "./components/ClassicDashboard";
 import { FarmCanvas } from "./components/FarmCanvas";
 import { Inspector } from "./components/Inspector";
@@ -6,6 +7,7 @@ import { ProjectLauncher } from "./components/ProjectLauncher";
 import { RobotWorker } from "./components/RobotWorker";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { UpdatePrompt } from "./components/UpdatePrompt";
+import { UsageLimits } from "./components/UsageLimits";
 import { WorkerList } from "./components/WorkerList";
 import {
   copyResumeCommand,
@@ -40,10 +42,10 @@ function EmptyFarm({ connected }: { connected: boolean }) {
 function initialDemoUpdate(): AppUpdateInfo | null {
   if (!import.meta.env.DEV || isNativeApp() || !new URLSearchParams(window.location.search).has("update")) return null;
   return {
-    currentVersion: "0.4.0",
-    version: "0.4.1",
+    currentVersion: "0.4.1",
+    version: "0.4.2",
     date: null,
-    notes: "Start a general Codex session directly in your configured development home.",
+    notes: "Attention shortcuts, context usage, reasoning effort, Codex limits, and click-away panels.",
   };
 }
 
@@ -52,6 +54,7 @@ export default function App() {
   const [snapshot, setSnapshot] = useState<MonitorSnapshot | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [listOpen, setListOpen] = useState(false);
+  const [attentionOpen, setAttentionOpen] = useState(false);
   const [launcherOpen, setLauncherOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settings, setSettings] = useState<PlowSettings | null>(null);
@@ -107,7 +110,14 @@ export default function App() {
   const plots = useMemo(() => groupWorkers(snapshot?.workers ?? []), [snapshot?.workers]);
   const classicWorkers = useMemo(() => plots.flatMap((plot) => plot.workers), [plots]);
   const selected = snapshot?.workers.find((worker) => worker.id === selectedId) ?? null;
-  const attentionCount = snapshot?.workers.filter((worker) => worker.status !== "running").length ?? 0;
+  const attentionWorkers = useMemo(
+    () => snapshot?.workers.filter((worker) => attentionFor(worker) !== null) ?? [],
+    [snapshot?.workers],
+  );
+  const attentionCount = attentionWorkers.length;
+  useEffect(() => {
+    if (attentionCount === 0) setAttentionOpen(false);
+  }, [attentionCount]);
   const connections = snapshot?.connections ?? [];
   const connectedCount = connections.filter((connection) => connection.status === "connected").length;
   const connected = connectedCount > 0;
@@ -126,6 +136,11 @@ export default function App() {
       ? connections[0].message
       : `${connectedCount} of ${connections.length} Codex hosts connected`;
   const closeSettings = useCallback(() => setSettingsOpen(false), []);
+  const dismissFloating = useCallback(() => {
+    setSelectedId(null);
+    setListOpen(false);
+    setAttentionOpen(false);
+  }, []);
   const viewMode = settings?.viewMode ?? "field";
   const connectionLabel = connectedCount > 0 && connections.length > 1
     ? `${connectedCount}/${connections.length} connected`
@@ -164,6 +179,7 @@ export default function App() {
     setViewSaveError(null);
     setSettings(next);
     setListOpen(false);
+    setAttentionOpen(false);
     try {
       await updateSettings(next);
     } catch (error) {
@@ -180,23 +196,29 @@ export default function App() {
           <div><h1>Plow {appVersion && <small className="brand__version" aria-label={`Version ${appVersion}`}>v{appVersion}</small>}</h1><p>Codex farm monitor</p></div>
         </div>
         <div className="topbar__actions">
-          {attentionCount > 0 && <span className="attention-pill"><strong>{attentionCount}</strong> need attention</span>}
+          {attentionCount > 0 && (
+            <button type="button" className="attention-pill" aria-expanded={attentionOpen} onClick={() => {
+              const nextOpen = !attentionOpen;
+              dismissFloating();
+              setAttentionOpen(nextOpen);
+            }}><strong>{attentionCount}</strong> need attention</button>
+          )}
           <div className="view-switch" role="group" aria-label="Agent view">
             <button type="button" className={viewMode === "field" ? "is-active" : ""} aria-pressed={viewMode === "field"} disabled={!settings} onClick={() => void changeViewMode("field")}>Field</button>
             <button type="button" className={viewMode === "classic" ? "is-active" : ""} aria-pressed={viewMode === "classic"} disabled={!settings} onClick={() => void changeViewMode("classic")}>Classic</button>
           </div>
           {viewSaveError && <span className="view-switch__error" role="alert" title={viewSaveError}>View not saved</span>}
-          <button type="button" className="button button--primary topbar__start" onClick={() => { setListOpen(false); setLauncherOpen(true); }} disabled={!settings}>Start agent</button>
-          <button type="button" className="button button--glass" onClick={() => setListOpen((open) => !open)} aria-expanded={listOpen}>Workers <span>{snapshot?.workers.length ?? 0}</span></button>
-          <button type="button" className="button button--glass" onClick={() => setSettingsOpen(true)} disabled={!settings}>Settings</button>
-          <button type="button" className={`connection connection--${connectionStatus}`} title={connectionMessage} onClick={() => setSettingsOpen(true)}>
+          <button type="button" className="button button--primary topbar__start" onClick={() => { dismissFloating(); setLauncherOpen(true); }} disabled={!settings}>Start agent</button>
+          <button type="button" className="button button--glass" onClick={() => { const nextOpen = !listOpen; dismissFloating(); setListOpen(nextOpen); }} aria-expanded={listOpen}>Workers <span>{snapshot?.workers.length ?? 0}</span></button>
+          <button type="button" className="button button--glass" onClick={() => { dismissFloating(); setSettingsOpen(true); }} disabled={!settings}>Settings</button>
+          <button type="button" className={`connection connection--${connectionStatus}`} title={connectionMessage} onClick={() => { dismissFloating(); setSettingsOpen(true); }}>
             <span />{connectionLabel}
           </button>
         </div>
       </header>
 
       {viewMode === "field" ? (
-        <section className="farm" aria-label="Codex agent farm">
+        <section className="farm" aria-label="Codex agent farm" onClick={dismissFloating}>
           <FarmCanvas />
           <div className="farm__wash" />
           {plots.map((plot) => (
@@ -219,10 +241,19 @@ export default function App() {
           onOpen={async (worker) => { await openThread(worker.id, worker.cwd); }}
           onCopy={async (worker) => { await copyResumeCommand(worker.id, worker.threadId, worker.cwd); }}
           onReviewed={removeReviewed}
+          onDismiss={dismissFloating}
         />
       )}
 
       {listOpen && <WorkerList plots={plots} selectedId={selectedId} onSelect={(worker) => { setSelectedId(worker.id); setListOpen(false); }} />}
+      {attentionOpen && attentionWorkers.length > 0 && (
+        <AttentionList
+          workers={attentionWorkers}
+          onClose={() => setAttentionOpen(false)}
+          onOpen={async (worker) => { await openThread(worker.id, worker.cwd); }}
+          onCopy={async (worker) => { await copyResumeCommand(worker.id, worker.threadId, worker.cwd); }}
+        />
+      )}
       {launcherOpen && settings && (
         <ProjectLauncher
           locations={projectLocations}
@@ -260,7 +291,7 @@ export default function App() {
         />
       )}
       <footer className="farm-footer">
-        <span>{viewMode === "field" ? `${plots.length} field${plots.length === 1 ? "" : "s"}` : `${classicWorkers.length} agent${classicWorkers.length === 1 ? "" : "s"}`}</span>
+        <UsageLimits hosts={snapshot?.rateLimits ?? []} />
         <span className="farm-footer__hint">{viewMode === "field" ? "Select a worker to inspect their thread" : "Text-only agent monitor"}</span>
         <span>{connectionMessage}</span>
       </footer>
