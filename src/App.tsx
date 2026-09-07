@@ -40,10 +40,10 @@ function EmptyFarm({ connected }: { connected: boolean }) {
 function initialDemoUpdate(): AppUpdateInfo | null {
   if (!import.meta.env.DEV || isNativeApp() || !new URLSearchParams(window.location.search).has("update")) return null;
   return {
-    currentVersion: "0.3.5",
-    version: "0.4.0",
+    currentVersion: "0.4.0",
+    version: "0.4.1",
     date: null,
-    notes: "Monitor local and remote Codex agents together with secure SSH host connections.",
+    notes: "Start a general Codex session directly in your configured development home.",
   };
 }
 

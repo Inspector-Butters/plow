@@ -82,9 +82,13 @@ pub fn validate_remote_directory(value: &str, label: &str) -> Result<(), String>
 pub fn validate_project_selection(home: &str, selected: &str) -> Result<(), String> {
     let home = normalize_remote_path(home)?;
     let selected = normalize_remote_path(selected)?;
+    if selected == home {
+        return Ok(());
+    }
     if selected.parent() != Some(home.as_path()) {
         return Err(
-            "Choose a project directly inside the configured remote development home".to_string(),
+            "Choose the configured remote development home or a project directly inside it"
+                .to_string(),
         );
     }
     Ok(())
@@ -414,7 +418,8 @@ mod tests {
     }
 
     #[test]
-    fn accepts_only_direct_remote_project_children() {
+    fn accepts_remote_home_and_direct_project_children() {
+        assert!(validate_project_selection("/srv/dev", "/srv/dev").is_ok());
         assert!(validate_project_selection("/srv/dev", "/srv/dev/plow").is_ok());
         assert!(validate_project_selection("/srv/dev", "/srv/dev/nested/plow").is_err());
         assert!(validate_project_selection("/srv/dev", "/srv/dev/../secret").is_err());

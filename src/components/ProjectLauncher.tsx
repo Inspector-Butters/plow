@@ -87,27 +87,41 @@ export function ProjectLauncher({ locations, onClose, onOpenSettings }: ProjectL
         ) : (
           <>
             <p className="project-launcher__home" title={developmentHome}>{location.hostKind === "ssh" ? `${location.hostLabel} · ` : ""}{developmentHome}</p>
-            {projects === null ? (
-              <div className="project-launcher__loading" role="status"><span />Looking for projects…</div>
-            ) : projects.length > 0 ? (
-              <div className="project-launcher__list" aria-label="Project folders">
-                {projects.map((project) => (
-                  <button
-                    key={project.path}
-                    type="button"
-                    onClick={() => void launch(project)}
-                    disabled={Boolean(startingPath)}
-                    aria-label={`Start Codex in ${project.name}`}
-                  >
-                    <span className="project-launcher__folder" aria-hidden="true">▰</span>
-                    <span><strong>{project.name}</strong><small>{project.path}</small></span>
-                    <span className="project-launcher__arrow" aria-hidden="true">→</span>
-                  </button>
-                ))}
-              </div>
-            ) : !error ? (
-              <p className="project-launcher__empty">No project folders were found here.</p>
-            ) : null}
+            <div className="project-launcher__list" aria-label="Start location">
+              <button
+                className="project-launcher__general"
+                type="button"
+                onClick={() => void launch({ name: "General", path: developmentHome })}
+                disabled={Boolean(startingPath)}
+                aria-label="Start general Codex session in development home"
+              >
+                <span className="project-launcher__home-icon" aria-hidden="true">⌂</span>
+                <span><strong>General</strong><small>Development home · {developmentHome}</small></span>
+                <span className="project-launcher__arrow" aria-hidden="true">→</span>
+              </button>
+              {projects === null ? (
+                <div className="project-launcher__loading" role="status"><span />Looking for projects…</div>
+              ) : projects.length > 0 ? (
+                <>
+                  <p className="project-launcher__section-label">Project folders</p>
+                  {projects.map((project) => (
+                    <button
+                      key={project.path}
+                      type="button"
+                      onClick={() => void launch(project)}
+                      disabled={Boolean(startingPath)}
+                      aria-label={`Start Codex in ${project.name}`}
+                    >
+                      <span className="project-launcher__folder" aria-hidden="true">▰</span>
+                      <span><strong>{project.name}</strong><small>{project.path}</small></span>
+                      <span className="project-launcher__arrow" aria-hidden="true">→</span>
+                    </button>
+                  ))}
+                </>
+              ) : !error ? (
+                <p className="project-launcher__empty">No project folders were found here. You can still start a general session above.</p>
+              ) : null}
+            </div>
           </>
         )}
 

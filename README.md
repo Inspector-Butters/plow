@@ -23,7 +23,7 @@ For local monitoring, Plow requires a current [Codex CLI](https://learn.chatgpt.
 codex --remote unix://
 ```
 
-To start sessions from Plow, set **Settings → Development home folder** to the absolute path containing your projects. The **Start agent** button lists its immediate subfolders and opens a new shared-daemon Codex session in the selected project.
+To start sessions from Plow, set **Settings → Development home folder** to the absolute path containing your projects. The **Start agent** button can open a general session directly in that development home, or list its immediate subfolders and open a session in a selected project.
 
 Plow first looks for the daemon-capable standalone executable at `$CODEX_HOME/packages/standalone/current/codex` (or `~/.codex/packages/standalone/current/codex`), then checks `PATH` and common install locations. You can override detection from **Settings → Codex executable** with an absolute path; changing it reconnects the monitor without restarting Plow.
 

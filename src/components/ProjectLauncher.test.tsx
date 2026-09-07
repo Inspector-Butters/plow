@@ -21,6 +21,20 @@ afterEach(() => {
 });
 
 describe("ProjectLauncher", () => {
+  it("starts a general session in the development home", async () => {
+    vi.mocked(listProjects).mockResolvedValue([{ name: "plow", path: "/home/farmer/Developer/plow" }]);
+    vi.mocked(startAgent).mockResolvedValue("Opening Codex");
+    const onClose = vi.fn();
+    const { getByRole } = render(
+      <ProjectLauncher locations={[localLocation]} onClose={onClose} onOpenSettings={() => undefined} />,
+    );
+
+    fireEvent.click(getByRole("button", { name: "Start general Codex session in development home" }));
+
+    await waitFor(() => expect(startAgent).toHaveBeenCalledWith("local", "/home/farmer/Developer"));
+    expect(onClose).toHaveBeenCalled();
+  });
+
   it("lists development folders and starts the selected project", async () => {
     vi.mocked(listProjects).mockResolvedValue([{ name: "plow", path: "/home/farmer/Developer/plow" }]);
     vi.mocked(startAgent).mockResolvedValue("Opening Codex");

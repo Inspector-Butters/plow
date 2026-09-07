@@ -378,15 +378,21 @@ fn validate_project_selection(home: &Path, value: &str) -> Result<PathBuf, Strin
     if !selected.is_absolute() {
         return Err("The selected project path must be absolute".to_string());
     }
+    let canonical_selected = terminal::validate_directory_path(value, "the selected project")?;
+    if canonical_selected == home {
+        return Ok(canonical_selected);
+    }
     let parent = selected
         .parent()
         .ok_or("The selected project has no parent folder")?;
     let parent = fs::canonicalize(parent)
         .map_err(|error| format!("Could not open the project's parent folder: {error}"))?;
     if parent != home {
-        return Err("Choose a project directly inside the configured development home".to_string());
+        return Err(
+            "Choose the configured development home or a project directly inside it".to_string(),
+        );
     }
-    terminal::validate_directory_path(value, "the selected project")
+    Ok(canonical_selected)
 }
 
 #[tauri::command]
@@ -755,6 +761,7 @@ mod tests {
             vec!["apple", "Zebra"]
         );
         assert!(validate_project_selection(&home, projects[0].path.as_str()).is_ok());
+        assert!(validate_project_selection(&home, &home.to_string_lossy()).is_ok());
         assert!(validate_project_selection(&home, "/tmp").is_err());
 
         fs::remove_dir_all(home).unwrap();

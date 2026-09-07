@@ -716,7 +716,11 @@ button { font: inherit; }
 .project-launcher__list button { display: grid; grid-template-columns: 38px minmax(0, 1fr) 26px; align-items: center; gap: 10px; width: 100%; min-height: 57px; padding: 8px 10px; color: var(--ink); background: #fffdf4; border: 1px solid rgba(39, 63, 50, .14); border-radius: 12px; cursor: pointer; text-align: left; transition: transform 140ms ease, border-color 140ms ease, background 140ms ease, box-shadow 140ms ease; }
 .project-launcher__list button:hover { transform: translateY(-1px); background: #f5f7df; border-color: rgba(64, 102, 55, .32); box-shadow: 0 6px 16px rgba(39, 66, 48, .09); }
 .project-launcher__list button:disabled { cursor: default; opacity: .52; transform: none; }
+.project-launcher__list .project-launcher__general { background: #eef4d8; border-color: rgba(76, 112, 59, .28); }
+.project-launcher__list .project-launcher__general:hover { background: #e6efc8; border-color: rgba(64, 102, 55, .42); }
 .project-launcher__folder { display: grid; place-items: center; width: 36px; height: 34px; color: #684f25; background: #efc766; border-radius: 6px 8px 8px 8px; font-size: 15px; }
+.project-launcher__home-icon { display: grid; place-items: center; width: 36px; height: 34px; color: #f8f8e7; background: #6f8f5c; border-radius: 10px; font-size: 20px; font-weight: 850; }
+.project-launcher__section-label { margin: 8px 3px 0; color: #718076; font-size: 9px; font-weight: 850; letter-spacing: .11em; text-transform: uppercase; }
 .project-launcher__list button > span:nth-child(2) { min-width: 0; display: grid; gap: 3px; }
 .project-launcher__list strong, .project-launcher__list small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .project-launcher__list strong { font-size: 12px; }
