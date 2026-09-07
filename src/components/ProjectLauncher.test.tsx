@@ -8,6 +8,13 @@ vi.mock("../lib/bridge", () => ({
   startAgent: vi.fn(),
 }));
 
+const localLocation = {
+  hostId: "local",
+  hostLabel: "This computer",
+  hostKind: "local" as const,
+  developmentHome: "/home/farmer/Developer",
+};
+
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
@@ -19,24 +26,42 @@ describe("ProjectLauncher", () => {
     vi.mocked(startAgent).mockResolvedValue("Opening Codex");
     const onClose = vi.fn();
     const { findByRole } = render(
-      <ProjectLauncher developmentHome="/home/farmer/Developer" onClose={onClose} onOpenSettings={() => undefined} />,
+      <ProjectLauncher locations={[localLocation]} onClose={onClose} onOpenSettings={() => undefined} />,
     );
 
     fireEvent.click(await findByRole("button", { name: "Start Codex in plow" }));
 
-    await waitFor(() => expect(startAgent).toHaveBeenCalledWith("/home/farmer/Developer/plow"));
+    await waitFor(() => expect(startAgent).toHaveBeenCalledWith("local", "/home/farmer/Developer/plow"));
     expect(onClose).toHaveBeenCalled();
   });
 
   it("directs the user to settings when no development home is configured", () => {
     const onOpenSettings = vi.fn();
     const { getByRole, getByText } = render(
-      <ProjectLauncher developmentHome="" onClose={() => undefined} onOpenSettings={onOpenSettings} />,
+      <ProjectLauncher locations={[{ ...localLocation, developmentHome: "" }]} onClose={() => undefined} onOpenSettings={onOpenSettings} />,
     );
 
-    expect(getByText("Choose your development folder first")).toBeInTheDocument();
+    expect(getByText("Choose a development folder for This computer")).toBeInTheDocument();
     fireEvent.click(getByRole("button", { name: "Settings" }));
     expect(onOpenSettings).toHaveBeenCalled();
     expect(listProjects).not.toHaveBeenCalled();
+  });
+
+  it("switches to an SSH host before listing and launching its projects", async () => {
+    vi.mocked(listProjects).mockImplementation(async (hostId) => hostId === "ssh:devbox"
+      ? [{ name: "remote-api", path: "/srv/dev/remote-api" }]
+      : []);
+    vi.mocked(startAgent).mockResolvedValue("Opening remote Codex");
+    const { findByRole, getByLabelText } = render(
+      <ProjectLauncher
+        locations={[localLocation, { hostId: "ssh:devbox", hostLabel: "devbox", hostKind: "ssh", developmentHome: "/srv/dev" }]}
+        onClose={() => undefined}
+        onOpenSettings={() => undefined}
+      />,
+    );
+
+    fireEvent.change(getByLabelText("Run on"), { target: { value: "ssh:devbox" } });
+    fireEvent.click(await findByRole("button", { name: "Start Codex in remote-api" }));
+    await waitFor(() => expect(startAgent).toHaveBeenCalledWith("ssh:devbox", "/srv/dev/remote-api"));
   });
 });

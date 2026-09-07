@@ -645,10 +645,29 @@ button { font: inherit; }
   font: 11px ui-monospace, "SFMono-Regular", Consolas, monospace;
 }
 .settings-field select { cursor: pointer; }
+.settings-field input:disabled, .settings-field select:disabled { cursor: default; opacity: .55; }
 .settings-field + .settings-field { margin-top: 15px; }
 .settings-field small { color: #727e75; font-size: 10px; line-height: 1.5; }
+.settings-field code { font: inherit; }
+.settings-connection-group { display: grid; gap: 15px; padding: 15px; background: rgba(97, 132, 83, .08); border: 1px solid rgba(57, 88, 52, .14); border-radius: 14px; }
+.settings-connection-group__heading, .settings-ssh__heading, .settings-ssh-host__toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.settings-connection-group__heading > div, .settings-ssh__heading > div { display: grid; gap: 3px; }
+.settings-connection-group__heading strong, .settings-ssh__heading strong { font-size: 13px; }
+.settings-connection-group__heading small, .settings-ssh__heading small { color: #748077; font-size: 9px; }
+.settings-toggle { display: flex; align-items: center; gap: 6px; color: #59675d; font-size: 9px; font-weight: 800; cursor: pointer; }
+.settings-toggle input { width: 16px; height: 16px; accent-color: var(--moss); }
+.settings-ssh { display: grid; gap: 11px; margin-top: 16px; }
+.settings-ssh__heading .button { min-height: 31px; padding: 0 10px; font-size: 9px; }
+.settings-ssh__empty { margin: 0; padding: 14px; color: #6f7b72; border: 1px dashed rgba(57, 88, 52, .23); border-radius: 11px; font-size: 10px; line-height: 1.5; text-align: center; }
+.settings-ssh__empty code { font-family: ui-monospace, "SFMono-Regular", Consolas, monospace; }
+.settings-ssh-host { position: relative; display: grid; gap: 14px; margin: 0; padding: 14px; background: rgba(255, 253, 244, .76); border: 1px solid rgba(39, 63, 50, .16); border-radius: 13px; }
+.settings-ssh-host legend { padding: 0 6px; color: #647269; font-size: 9px; font-weight: 850; text-transform: uppercase; letter-spacing: .08em; }
+.settings-ssh-host__toolbar { margin-top: -4px; }
+.settings-ssh-host__toolbar .button { min-height: 28px; padding: 0 9px; color: #84483d; font-size: 8px; }
 .settings-panel__note { margin: 15px 0; padding: 11px 12px; color: #5f562f; background: #f6edc8; border-radius: 10px; font-size: 10px; font-weight: 650; line-height: 1.5; }
+.settings-panel__connections { display: grid; gap: 7px; margin: 0 0 16px; }
 .settings-panel__connection { display: grid; gap: 5px; margin: 0 0 16px; padding: 11px 12px; color: #42554a; background: rgba(106, 148, 102, .12); border-left: 4px solid #77a466; border-radius: 9px; font-size: 10px; line-height: 1.45; overflow-wrap: anywhere; }
+.settings-panel__connections .settings-panel__connection { margin: 0; }
 .settings-panel__connection--missingCodex, .settings-panel__connection--incompatible, .settings-panel__connection--disconnected { color: #71392d; background: rgba(237, 119, 95, .13); border-left-color: var(--coral); }
 .settings-panel__connection strong { text-transform: capitalize; }
 .settings-panel__connection code { overflow: hidden; color: inherit; font: 9px ui-monospace, "SFMono-Regular", Consolas, monospace; text-overflow: ellipsis; white-space: nowrap; opacity: .78; }
@@ -686,6 +705,7 @@ button { font: inherit; }
 .project-launcher__close { position: absolute; right: 13px; top: 13px; width: 35px; min-height: 35px; padding: 0; font-size: 22px; background: rgba(39,62,50,.07); border-color: transparent; }
 .project-launcher__eyebrow { margin: 0 40px 7px 0; color: #708071; font-size: 10px; font-weight: 850; text-transform: uppercase; letter-spacing: .13em; }
 .project-launcher h2 { margin: 0 40px 8px 0; font-size: 24px; letter-spacing: -.025em; }
+.project-launcher__host { margin: 16px 0; }
 .project-launcher__home { margin: 0 0 16px; overflow: hidden; color: #78847b; font: 10px ui-monospace, "SFMono-Regular", Consolas, monospace; text-overflow: ellipsis; white-space: nowrap; }
 .project-launcher__setup, .project-launcher__empty { margin: 18px 0; padding: 20px; color: #59675d; background: rgba(110, 145, 92, .1); border: 1px dashed rgba(57, 88, 52, .25); border-radius: 13px; font-size: 11px; line-height: 1.55; text-align: center; }
 .project-launcher__setup { display: grid; gap: 5px; }

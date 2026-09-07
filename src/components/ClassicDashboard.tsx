@@ -46,7 +46,7 @@ export function ClassicDashboard({ workers, connected, selectedId, onSelect, onO
       {workers.length === 0 ? (
         <div className="classic-dashboard__empty">
           <h3>{connected ? "No active agents" : "Connecting to Codex"}</h3>
-          <p>{connected ? "Start a Codex session and it will appear here." : "Plow is looking for the local Codex daemon."}</p>
+          <p>{connected ? "Start a Codex session and it will appear here." : "Plow is connecting to your Codex hosts."}</p>
         </div>
       ) : (
         <div className="classic-agents">
@@ -62,7 +62,7 @@ export function ClassicDashboard({ workers, connected, selectedId, onSelect, onO
               <article className={`classic-agent${selectedId === worker.id ? " classic-agent--selected" : ""}`} key={worker.id}>
                 <div className="classic-agent__identity">
                   <strong>{worker.displayName}</strong>
-                  <small>{worker.parentId ? "Crew member" : "Lead agent"}</small>
+                  <small>{worker.hostLabel}{worker.hostKind === "ssh" ? " · SSH" : ""} · {worker.parentId ? "Crew member" : "Lead agent"}</small>
                 </div>
                 <div className="classic-agent__thread">
                   <strong>{worker.threadName}</strong>

@@ -3,7 +3,7 @@ import { getAppVersion, resumeCommand, startAgentCommand } from "./bridge";
 
 describe("terminal handoff", () => {
   it("reports the packaged app version", async () => {
-    await expect(getAppVersion()).resolves.toBe("0.3.5");
+    await expect(getAppVersion()).resolves.toBe("0.4.0");
   });
 
   it("resumes the exact thread in its launch folder", () => {

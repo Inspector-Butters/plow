@@ -42,7 +42,7 @@ export async function openThread(threadId: string, cwd: string): Promise<string>
   return invoke<string>("open_thread", { threadId });
 }
 
-export async function listProjects(): Promise<ProjectFolder[]> {
+export async function listProjects(hostId = "local"): Promise<ProjectFolder[]> {
   if (!isNativeApp()) {
     return [
       { name: "plow", path: "/home/demo/Developer/plow" },
@@ -51,17 +51,19 @@ export async function listProjects(): Promise<ProjectFolder[]> {
     ];
   }
   const { invoke } = await import("@tauri-apps/api/core");
-  return invoke<ProjectFolder[]>("list_projects");
+  return invoke<ProjectFolder[]>("list_projects", { hostId });
 }
 
-export async function startAgent(projectPath: string): Promise<string> {
+export async function startAgent(hostId: string, projectPath: string): Promise<string> {
   if (!isNativeApp()) {
-    const command = startAgentCommand(projectPath);
+    const command = hostId === "local"
+      ? startAgentCommand(projectPath)
+      : `ssh -t ${shellQuote(hostId.replace(/^ssh:/, ""))} codex --remote unix:// --cd ${shellQuote(projectPath)}`;
     await navigator.clipboard?.writeText(command);
     return "Browser preview copied the start command";
   }
   const { invoke } = await import("@tauri-apps/api/core");
-  return invoke<string>("start_agent", { projectPath });
+  return invoke<string>("start_agent", { hostId, projectPath });
 }
 
 function shellQuote(value: string): string {
@@ -76,9 +78,19 @@ export function startAgentCommand(cwd: string): string {
   return `codex --remote unix:// --cd ${shellQuote(cwd)}`;
 }
 
-export async function copyResumeCommand(threadId: string, cwd: string): Promise<void> {
-  const command = resumeCommand(threadId, cwd);
+export async function copyResumeCommand(workerId: string, threadId: string, cwd: string): Promise<void> {
+  let command = resumeCommand(threadId, cwd);
+  if (isNativeApp()) {
+    const { invoke } = await import("@tauri-apps/api/core");
+    command = await invoke<string>("get_resume_command", { workerId });
+  }
   await navigator.clipboard.writeText(command);
+}
+
+export async function listSshHosts(): Promise<string[]> {
+  if (!isNativeApp()) return ["devbox", "build-server"];
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke<string[]>("list_ssh_hosts");
 }
 
 export async function loadSettings(): Promise<PlowSettings> {
@@ -86,8 +98,10 @@ export async function loadSettings(): Promise<PlowSettings> {
     notifyWhenUnfocused: true,
     keepInTray: true,
     reducedMotion: window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+    localEnabled: true,
     codexPath: "",
     developmentHome: isNativeApp() ? "" : "/home/demo/Developer",
+    sshHosts: [],
     viewMode: !isNativeApp() && new URLSearchParams(window.location.search).get("view") === "classic" ? "classic" : "field",
   };
   if (!isNativeApp()) return defaults;

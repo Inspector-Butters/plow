@@ -5,6 +5,10 @@ const now = Math.floor(Date.now() / 1000);
 export const demoWorkers: Worker[] = [
   {
     id: "019f5ade-99ad-7ed1-b2f3-159136634cf7",
+    threadId: "019f5ade-99ad-7ed1-b2f3-159136634cf7",
+    hostId: "local",
+    hostLabel: "This computer",
+    hostKind: "local",
     parentId: null,
     displayName: "plow",
     threadName: "Polish the agent dashboard",
@@ -22,6 +26,10 @@ export const demoWorkers: Worker[] = [
   },
   {
     id: "01a067db-92ea-7081-88be-d1518179660e",
+    threadId: "01a067db-92ea-7081-88be-d1518179660e",
+    hostId: "local",
+    hostLabel: "This computer",
+    hostKind: "local",
     parentId: "019f5ade-99ad-7ed1-b2f3-159136634cf7",
     displayName: "plow",
     threadName: "Check the notification flow",
@@ -38,7 +46,11 @@ export const demoWorkers: Worker[] = [
     attentionId: "demo-approval",
   },
   {
-    id: "01a061d3-6d6c-7493-a8e0-bc1ee1b524fa",
+    id: "ssh:devbox:01a061d3-6d6c-7493-a8e0-bc1ee1b524fa",
+    threadId: "01a061d3-6d6c-7493-a8e0-bc1ee1b524fa",
+    hostId: "ssh:devbox",
+    hostLabel: "devbox",
+    hostKind: "ssh",
     parentId: null,
     displayName: "beacon-chain",
     threadName: "Investigate state recovery",
@@ -56,6 +68,10 @@ export const demoWorkers: Worker[] = [
   },
   {
     id: "01a06322-bd04-76d1-a7de-fea9326a85ce",
+    threadId: "01a06322-bd04-76d1-a7de-fea9326a85ce",
+    hostId: "local",
+    hostLabel: "This computer",
+    hostKind: "local",
     parentId: null,
     displayName: "consensus-specs",
     threadName: "Review consensus specification changes",
@@ -72,7 +88,11 @@ export const demoWorkers: Worker[] = [
     attentionId: "demo-complete",
   },
   {
-    id: "01a062f3-0cc2-76d1-a399-b75bf204ee05",
+    id: "ssh:devbox:01a062f3-0cc2-76d1-a399-b75bf204ee05",
+    threadId: "01a062f3-0cc2-76d1-a399-b75bf204ee05",
+    hostId: "ssh:devbox",
+    hostLabel: "devbox",
+    hostKind: "ssh",
     parentId: null,
     displayName: "infra",
     threadName: "Fix devnet bootstrap",
@@ -92,10 +112,24 @@ export const demoWorkers: Worker[] = [
 
 export const demoSnapshot: MonitorSnapshot = {
   workers: demoWorkers,
-  connection: {
-    status: "connected",
-    codexVersion: "demo",
-    codexPath: "/Users/demo/.codex/packages/standalone/current/codex",
-    message: "Browser preview — showing demo workers",
-  },
+  connections: [
+    {
+      hostId: "local",
+      hostLabel: "This computer",
+      hostKind: "local",
+      status: "connected",
+      codexVersion: "demo",
+      codexPath: "/Users/demo/.codex/packages/standalone/current/codex",
+      message: "Browser preview — showing demo workers",
+    },
+    {
+      hostId: "ssh:devbox",
+      hostLabel: "devbox",
+      hostKind: "ssh",
+      status: "connected",
+      codexVersion: "demo",
+      codexPath: "codex",
+      message: "Browser preview — watching devbox over SSH",
+    },
+  ],
 };

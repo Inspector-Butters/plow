@@ -24,7 +24,7 @@ import { workerPosition } from "./lib/layout";
 import { checkForAppUpdate, dismissAppUpdate, installAppUpdate } from "./lib/updater";
 import { attentionFor, groupWorkers } from "./lib/workers";
 import type { AppUpdateInfo } from "./lib/updater";
-import type { AgentViewMode, MonitorSnapshot, PlowSettings, RepoPlot, Worker } from "./types";
+import type { AgentViewMode, ConnectionStatus, MonitorSnapshot, PlowSettings, ProjectLocation, RepoPlot, Worker } from "./types";
 import "./styles.css";
 
 function EmptyFarm({ connected }: { connected: boolean }) {
@@ -32,8 +32,7 @@ function EmptyFarm({ connected }: { connected: boolean }) {
     <div className="empty-farm">
       <img src="/assets/plow-worker-v2.png" alt="A smiling robot farmer" />
       <h2>{connected ? "The fields are quiet" : "Waking the farm…"}</h2>
-      <p>{connected ? "Start a Codex session on the shared daemon and a worker will arrive." : "Plow is looking for the local Codex daemon."}</p>
-      {connected && <code>codex --remote unix://</code>}
+      <p>{connected ? "Start a Codex session on a monitored host and a worker will arrive." : "Plow is connecting to your Codex hosts."}</p>
     </div>
   );
 }
@@ -41,10 +40,10 @@ function EmptyFarm({ connected }: { connected: boolean }) {
 function initialDemoUpdate(): AppUpdateInfo | null {
   if (!import.meta.env.DEV || isNativeApp() || !new URLSearchParams(window.location.search).has("update")) return null;
   return {
-    currentVersion: "0.3.4",
-    version: "0.3.5",
+    currentVersion: "0.3.5",
+    version: "0.4.0",
     date: null,
-    notes: "Smoother workers, a sturdier harvest, and a few small fixes around the farm.",
+    notes: "Monitor local and remote Codex agents together with secure SSH host connections.",
   };
 }
 
@@ -109,18 +108,47 @@ export default function App() {
   const classicWorkers = useMemo(() => plots.flatMap((plot) => plot.workers), [plots]);
   const selected = snapshot?.workers.find((worker) => worker.id === selectedId) ?? null;
   const attentionCount = snapshot?.workers.filter((worker) => worker.status !== "running").length ?? 0;
-  const connected = snapshot?.connection.status === "connected";
+  const connections = snapshot?.connections ?? [];
+  const connectedCount = connections.filter((connection) => connection.status === "connected").length;
+  const connected = connectedCount > 0;
+  const connectionStatus: ConnectionStatus = connected
+    ? "connected"
+    : connections.some((connection) => connection.status === "incompatible")
+      ? "incompatible"
+      : connections.some((connection) => connection.status === "missingCodex")
+        ? "missingCodex"
+        : connections.some((connection) => connection.status === "disconnected")
+          ? "disconnected"
+          : "connecting";
+  const connectionMessage = connections.length === 0
+    ? "Starting Plow"
+    : connections.length === 1
+      ? connections[0].message
+      : `${connectedCount} of ${connections.length} Codex hosts connected`;
   const closeSettings = useCallback(() => setSettingsOpen(false), []);
   const viewMode = settings?.viewMode ?? "field";
-  const connectionLabel = connected
-    ? "Connected"
-    : snapshot?.connection.status === "missingCodex"
+  const connectionLabel = connectedCount > 0 && connections.length > 1
+    ? `${connectedCount}/${connections.length} connected`
+    : connected
+      ? "Connected"
+      : connectionStatus === "missingCodex"
       ? "Codex missing"
-      : snapshot?.connection.status === "incompatible"
+      : connectionStatus === "incompatible"
         ? "Codex incompatible"
-        : snapshot?.connection.status === "disconnected"
+        : connectionStatus === "disconnected"
           ? "Connection problem"
           : "Connecting";
+  const projectLocations = useMemo<ProjectLocation[]>(() => {
+    if (!settings) return [];
+    const locations: ProjectLocation[] = [];
+    if (settings.localEnabled) {
+      locations.push({ hostId: "local", hostLabel: "This computer", hostKind: "local", developmentHome: settings.developmentHome });
+    }
+    for (const host of settings.sshHosts) {
+      if (host.enabled) locations.push({ hostId: `ssh:${host.alias}`, hostLabel: host.alias, hostKind: "ssh", developmentHome: host.developmentHome });
+    }
+    return locations;
+  }, [settings]);
 
   const removeReviewed = async (worker: Worker) => {
     if (!worker.attentionId) return;
@@ -161,7 +189,7 @@ export default function App() {
           <button type="button" className="button button--primary topbar__start" onClick={() => { setListOpen(false); setLauncherOpen(true); }} disabled={!settings}>Start agent</button>
           <button type="button" className="button button--glass" onClick={() => setListOpen((open) => !open)} aria-expanded={listOpen}>Workers <span>{snapshot?.workers.length ?? 0}</span></button>
           <button type="button" className="button button--glass" onClick={() => setSettingsOpen(true)} disabled={!settings}>Settings</button>
-          <button type="button" className={`connection connection--${snapshot?.connection.status ?? "connecting"}`} title={snapshot?.connection.message} onClick={() => setSettingsOpen(true)}>
+          <button type="button" className={`connection connection--${connectionStatus}`} title={connectionMessage} onClick={() => setSettingsOpen(true)}>
             <span />{connectionLabel}
           </button>
         </div>
@@ -189,7 +217,7 @@ export default function App() {
           selectedId={selectedId}
           onSelect={(worker) => setSelectedId(worker.id)}
           onOpen={async (worker) => { await openThread(worker.id, worker.cwd); }}
-          onCopy={async (worker) => { await copyResumeCommand(worker.id, worker.cwd); }}
+          onCopy={async (worker) => { await copyResumeCommand(worker.id, worker.threadId, worker.cwd); }}
           onReviewed={removeReviewed}
         />
       )}
@@ -197,7 +225,7 @@ export default function App() {
       {listOpen && <WorkerList plots={plots} selectedId={selectedId} onSelect={(worker) => { setSelectedId(worker.id); setListOpen(false); }} />}
       {launcherOpen && settings && (
         <ProjectLauncher
-          developmentHome={settings.developmentHome}
+          locations={projectLocations}
           onClose={() => setLauncherOpen(false)}
           onOpenSettings={() => { setLauncherOpen(false); setSettingsOpen(true); }}
         />
@@ -207,12 +235,12 @@ export default function App() {
         onClose={() => setSelectedId(null)}
         onOpen={async (worker) => { await openThread(worker.id, worker.cwd); }}
         onReviewed={removeReviewed}
-        onCopy={async (worker) => { await copyResumeCommand(worker.id, worker.cwd); }}
+        onCopy={async (worker) => { await copyResumeCommand(worker.id, worker.threadId, worker.cwd); }}
       />
       {settingsOpen && settings && (
         <SettingsPanel
           settings={settings}
-          connection={snapshot?.connection ?? null}
+          connection={connections}
           onClose={closeSettings}
           onSave={async (next) => {
             await updateSettings(next);
@@ -234,7 +262,7 @@ export default function App() {
       <footer className="farm-footer">
         <span>{viewMode === "field" ? `${plots.length} field${plots.length === 1 ? "" : "s"}` : `${classicWorkers.length} agent${classicWorkers.length === 1 ? "" : "s"}`}</span>
         <span className="farm-footer__hint">{viewMode === "field" ? "Select a worker to inspect their thread" : "Text-only agent monitor"}</span>
-        <span>{snapshot?.connection.message ?? "Starting Plow"}</span>
+        <span>{connectionMessage}</span>
       </footer>
     </main>
   );

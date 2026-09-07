@@ -1,3 +1,4 @@
+use crate::{remote, SshHostSettings};
 use std::{
     env, fs,
     os::unix::fs::PermissionsExt,
@@ -100,6 +101,57 @@ pub fn start_agent(codex: &Path, cwd: &Path) -> Result<String, String> {
     Err("Starting an agent is only supported on macOS and Linux".to_string())
 }
 
+pub fn open_remote_thread(
+    host: &SshHostSettings,
+    thread_id: &str,
+    cwd: &str,
+) -> Result<String, String> {
+    let id = Uuid::parse_str(thread_id)
+        .map_err(|_| "Codex returned an invalid thread id".to_string())?;
+    remote::validate_remote_directory(cwd, "the remote thread's working folder")?;
+    let argv = remote::terminal_arguments(
+        host,
+        &[
+            "resume".to_string(),
+            id.to_string(),
+            "--remote".to_string(),
+            "unix://".to_string(),
+            "--cd".to_string(),
+            cwd.to_string(),
+        ],
+    )?;
+    open_remote_terminal(&argv, &format!("Opening the thread on {}", host.alias))
+}
+
+pub fn start_remote_agent(host: &SshHostSettings, cwd: &str) -> Result<String, String> {
+    remote::validate_remote_directory(cwd, "the selected remote project")?;
+    let argv = remote::terminal_arguments(
+        host,
+        &[
+            "--remote".to_string(),
+            "unix://".to_string(),
+            "--cd".to_string(),
+            cwd.to_string(),
+        ],
+    )?;
+    open_remote_terminal(&argv, &format!("Starting Codex on {}", host.alias))
+}
+
+fn open_remote_terminal(argv: &[String], action: &str) -> Result<String, String> {
+    #[cfg(target_os = "macos")]
+    {
+        return open_macos_argv(argv, action);
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        return open_linux_argv(argv, action);
+    }
+
+    #[allow(unreachable_code)]
+    Err("SSH terminal handoff is only supported on macOS and Linux".to_string())
+}
+
 #[cfg(target_os = "macos")]
 fn open_macos(codex: &Path, thread_id: Option<&str>, cwd: &Path) -> Result<String, String> {
     let cwd = cwd.to_string_lossy();
@@ -143,9 +195,68 @@ fn open_macos(codex: &Path, thread_id: Option<&str>, cwd: &Path) -> Result<Strin
     Ok(action.to_string())
 }
 
-#[cfg(target_os = "macos")]
 fn shell_quote(value: &str) -> String {
     format!("'{}'", value.replace('\'', "'\\''"))
+}
+
+pub fn resume_command(thread_id: &str, cwd: &str) -> Result<String, String> {
+    let id = Uuid::parse_str(thread_id)
+        .map_err(|_| "Codex returned an invalid thread id".to_string())?;
+    Ok(format!(
+        "codex resume {} --remote unix:// --cd {}",
+        id,
+        shell_quote(cwd)
+    ))
+}
+
+pub fn remote_resume_command(
+    host: &SshHostSettings,
+    thread_id: &str,
+    cwd: &str,
+) -> Result<String, String> {
+    let id = Uuid::parse_str(thread_id)
+        .map_err(|_| "Codex returned an invalid thread id".to_string())?;
+    remote::validate_remote_directory(cwd, "the remote thread's working folder")?;
+    let argv = remote::terminal_arguments(
+        host,
+        &[
+            "resume".to_string(),
+            id.to_string(),
+            "--remote".to_string(),
+            "unix://".to_string(),
+            "--cd".to_string(),
+            cwd.to_string(),
+        ],
+    )?;
+    Ok(argv
+        .iter()
+        .map(|value| shell_quote(value))
+        .collect::<Vec<_>>()
+        .join(" "))
+}
+
+#[cfg(target_os = "macos")]
+fn open_macos_argv(argv: &[String], action: &str) -> Result<String, String> {
+    let command = argv
+        .iter()
+        .map(|value| shell_quote(value))
+        .collect::<Vec<_>>()
+        .join(" ");
+    let script_path = env::temp_dir().join(format!("plow-ssh-terminal-{}.command", Uuid::new_v4()));
+    let script = format!(
+        "#!/bin/sh\ntrap 'rm -f -- \"$0\"' EXIT\n{}\nstatus=$?\nif [ \"$status\" -ne 0 ]; then\n  printf '\\nPlow could not open the remote Codex session (exit %s).\\n' \"$status\"\n  printf 'Press Return to close this window. '\n  read -r _\nfi\nexit \"$status\"\n",
+        command,
+    );
+    fs::write(&script_path, script)
+        .map_err(|error| format!("Could not prepare SSH terminal handoff: {error}"))?;
+    fs::set_permissions(&script_path, fs::Permissions::from_mode(0o700))
+        .map_err(|error| format!("Could not make SSH terminal handoff executable: {error}"))?;
+    Command::new("/usr/bin/open")
+        .args(["-a", "Terminal"])
+        .arg(&script_path)
+        .spawn()
+        .map_err(|error| format!("Could not open Terminal: {error}"))?;
+    Ok(action.to_string())
 }
 
 #[cfg(target_os = "linux")]
@@ -175,6 +286,17 @@ status=$?
 if [ "$status" -ne 0 ]; then
   printf '\nPlow could not start Codex (exit %s).\n' "$status"
   printf 'The command was: codex --remote unix:// --cd %s\n' "$2"
+  exec "${SHELL:-/bin/sh}" -l
+fi
+exit "$status"
+"#;
+
+#[cfg(target_os = "linux")]
+const LINUX_REMOTE_SCRIPT: &str = r#"
+"$@"
+status=$?
+if [ "$status" -ne 0 ]; then
+  printf '\nPlow could not open the remote Codex session (exit %s).\n' "$status"
   exec "${SHELL:-/bin/sh}" -l
 fi
 exit "$status"
@@ -250,6 +372,33 @@ fn open_linux_with_candidates(
         }
     }
 
+    Err("No working terminal could be opened. Make sure a supported desktop terminal is installed (for example GNOME Terminal, Konsole, Kitty, or xterm), then try again.".to_string())
+}
+
+#[cfg(target_os = "linux")]
+fn open_linux_argv(argv: &[String], action: &str) -> Result<String, String> {
+    for (terminal, prefix) in LINUX_TERMINALS {
+        let Some(path) = find_in_path(terminal) else {
+            continue;
+        };
+        let mut command = Command::new(path);
+        command
+            .args(*prefix)
+            .arg("/bin/sh")
+            .arg("-c")
+            .arg(LINUX_REMOTE_SCRIPT)
+            .arg("plow-ssh-terminal")
+            .args(argv)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
+        let Ok(child) = command.spawn() else {
+            continue;
+        };
+        if terminal_launch_succeeded(child) {
+            return Ok(format!("{action} in {terminal}"));
+        }
+    }
     Err("No working terminal could be opened. Make sure a supported desktop terminal is installed (for example GNOME Terminal, Konsole, Kitty, or xterm), then try again.".to_string())
 }
 

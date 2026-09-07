@@ -39,6 +39,7 @@ export function Inspector({ worker, onClose, onOpen, onReviewed, onCopy }: Inspe
       </div>
 
       <dl className="inspector__facts">
+        <div><dt>Host</dt><dd>{worker.hostLabel}{worker.hostKind === "ssh" ? " (SSH)" : ""}</dd></div>
         <div><dt>Field</dt><dd>{worker.repoName}</dd></div>
         {worker.branch && <div><dt>Branch</dt><dd>{worker.branch}</dd></div>}
         <div><dt>Job</dt><dd>{worker.activity}</dd></div>

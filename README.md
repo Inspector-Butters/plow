@@ -17,7 +17,7 @@ Plow checks the latest GitHub release after launch. When a newer signed build is
 
 On Linux, the installer puts the matching AppImage at `~/.local/bin/plow` (or `$XDG_BIN_HOME/plow`). On macOS, it downloads and opens the DMG for Apple Silicon or Intel; drag Plow into Applications. The GitHub macOS builds are ad-hoc signed rather than notarized, so the first launch may require right-clicking Plow and choosing **Open**, or allowing it in **System Settings → Privacy & Security**.
 
-Plow requires a current [Codex CLI](https://learn.chatgpt.com/docs/developer-commands?surface=cli) with managed app-server daemon support. Sessions monitored by Plow should connect to the shared daemon:
+For local monitoring, Plow requires a current [Codex CLI](https://learn.chatgpt.com/docs/developer-commands?surface=cli) with managed app-server daemon support. Sessions monitored by Plow should connect to the shared daemon:
 
 ```sh
 codex --remote unix://
@@ -37,6 +37,31 @@ curl -fsSL https://chatgpt.com/codex/install.sh | sh
 
 On Linux, terminal handoff supports GNOME Terminal, Console (`kgx`), Ptyxis, Konsole, Xfce Terminal, MATE Terminal, Kitty, WezTerm, Foot, Alacritty, Tilix, LXTerminal, xterm, and the standard desktop terminal launchers. Plow tries another installed terminal when a launcher fails immediately.
 
+## SSH hosts
+
+Plow can monitor this computer and multiple SSH hosts at the same time. It uses the system `ssh` command, your existing `~/.ssh/config`, trusted host keys, and SSH agent; it never reads or stores private keys or passwords.
+
+1. Add a concrete alias to `~/.ssh/config` and confirm non-interactive key-based access works:
+
+   ```sshconfig
+   Host devbox
+     HostName devbox.example.com
+     User you
+     IdentityFile ~/.ssh/id_ed25519
+   ```
+
+   ```sh
+   ssh devbox
+   ```
+
+2. Install and authenticate the standalone Codex build on the remote host. The `codex` command must be available in the remote login shell, or you can enter its absolute remote path in Plow.
+
+3. Open **Settings → SSH hosts**, add `devbox`, and optionally set its remote development home such as `/home/you/Developer`. Plow will start the remote managed daemon and connect through an SSH stdio proxy; no app-server port is exposed.
+
+Remote project folders appear in **Start agent**. Plow’s terminal and resume buttons open an interactive SSH terminal and connect Codex to that host’s shared daemon. Hosts reconnect independently if a network connection drops. Disable **This computer** in Settings if you only want remote monitoring.
+
+For security, Plow uses OpenSSH batch mode for background monitoring. Password-only hosts will not connect in the background; configure keys and an SSH agent first. Keep app-server off public or shared network listeners, as recommended by the [official Codex remote connection guide](https://learn.chatgpt.com/docs/remote-connections).
+
 ## Development
 
 ```sh
@@ -50,7 +75,7 @@ Browser development uses deterministic demo workers. To run the native monitor, 
 npm run tauri dev
 ```
 
-Plow starts the managed Codex app-server daemon and connects to its Unix-socket WebSocket control endpoint. Codex sessions should use the shared daemon:
+Plow starts each configured host's managed Codex app-server daemon and connects to its Unix-socket WebSocket control endpoint, directly for this computer or through `codex app-server proxy` over SSH. Codex sessions should use the shared daemon on the machine where they run:
 
 ```sh
 codex --remote unix://

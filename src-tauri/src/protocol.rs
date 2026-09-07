@@ -1,11 +1,11 @@
 use crate::{
-    activity_for, display_name_for_cwd, emit_snapshot, repo_for_cwd, ConnectionInfo,
-    ConnectionStatus, SharedState, Worker, WorkerStatus,
+    activity_for, display_name_for_cwd, emit_snapshot, remote, repo_for_cwd, ConnectionInfo,
+    ConnectionStatus, HostKind, PlowSettings, SharedState, SshHostSettings, Worker, WorkerStatus,
 };
 use serde_json::{json, Value};
 use std::{
     collections::{HashMap, HashSet},
-    io,
+    io::{self, Read, Write},
     os::unix::net::UnixStream,
     path::{Path, PathBuf},
     process::Command,
@@ -17,6 +17,12 @@ use tauri::AppHandle;
 use tungstenite::{client, Error as WebSocketError, Message, WebSocket};
 
 pub trait HostTransport: Send + Sync {
+    fn host_id(&self) -> String;
+    fn host_label(&self) -> String;
+    fn host_kind(&self) -> HostKind;
+    fn configured_codex(&self) -> Option<String>;
+    fn monitor_revision(&self) -> u64;
+    fn repo_for_cwd(&self, cwd: &str) -> (String, String);
     fn run(&self, app: &AppHandle, state: &Arc<SharedState>) -> Result<(), String>;
 }
 
@@ -35,6 +41,30 @@ impl LocalDaemonTransport {
 }
 
 impl HostTransport for LocalDaemonTransport {
+    fn host_id(&self) -> String {
+        "local".to_string()
+    }
+
+    fn host_label(&self) -> String {
+        "This computer".to_string()
+    }
+
+    fn host_kind(&self) -> HostKind {
+        HostKind::Local
+    }
+
+    fn configured_codex(&self) -> Option<String> {
+        Some(self.codex.to_string_lossy().into_owned())
+    }
+
+    fn monitor_revision(&self) -> u64 {
+        self.monitor_revision
+    }
+
+    fn repo_for_cwd(&self, cwd: &str) -> (String, String) {
+        repo_for_cwd(cwd)
+    }
+
     fn run(&self, app: &AppHandle, state: &Arc<SharedState>) -> Result<(), String> {
         let daemon = Command::new(&self.codex)
             .args(["app-server", "daemon", "start"])
@@ -64,73 +94,289 @@ impl HostTransport for LocalDaemonTransport {
         let (socket, _) = client("ws://localhost/", stream)
             .map_err(|error| format!("Codex WebSocket handshake failed: {error}"))?;
 
-        monitor_socket(socket, app, state, self.monitor_revision)
+        monitor_socket(socket, app, state, self)
+    }
+}
+
+pub struct SshDaemonTransport {
+    host: SshHostSettings,
+    monitor_revision: u64,
+}
+
+impl SshDaemonTransport {
+    fn new(host: SshHostSettings, monitor_revision: u64) -> Self {
+        Self {
+            host,
+            monitor_revision,
+        }
+    }
+}
+
+impl HostTransport for SshDaemonTransport {
+    fn host_id(&self) -> String {
+        remote::host_id(&self.host.alias)
+    }
+
+    fn host_label(&self) -> String {
+        self.host.alias.clone()
+    }
+
+    fn host_kind(&self) -> HostKind {
+        HostKind::Ssh
+    }
+
+    fn configured_codex(&self) -> Option<String> {
+        Some(remote::remote_codex_command(&self.host.codex_path).to_string())
+    }
+
+    fn monitor_revision(&self) -> u64 {
+        self.monitor_revision
+    }
+
+    fn repo_for_cwd(&self, cwd: &str) -> (String, String) {
+        repo_name_and_path(cwd)
+    }
+
+    fn run(&self, app: &AppHandle, state: &Arc<SharedState>) -> Result<(), String> {
+        let daemon = remote::run_codex(&self.host, &["app-server", "daemon", "start"])?;
+        if !daemon.status.success() {
+            let details = String::from_utf8_lossy(&daemon.stderr);
+            let hint = if details.contains("managed standalone Codex install not found") {
+                " Install the standalone Codex build on the remote host, or set its daemon-capable executable in Settings."
+            } else {
+                ""
+            };
+            return Err(format!(
+                "Codex daemon failed to start on {}: {}{}",
+                self.host.alias,
+                details.trim(),
+                hint
+            ));
+        }
+
+        let stream = remote::spawn_codex_proxy(&self.host)?;
+        let (mut socket, _) = client("ws://localhost/", stream)
+            .map_err(|error| format!("Codex SSH WebSocket handshake failed: {error}"))?;
+        socket
+            .get_mut()
+            .set_read_timeout(Duration::from_millis(150));
+        monitor_socket(socket, app, state, self)
     }
 }
 
 pub fn spawn_monitor(app: AppHandle, state: Arc<SharedState>) {
     thread::spawn(move || {
-        let mut backoff = Duration::from_secs(1);
+        let mut observed_revision = u64::MAX;
         loop {
-            update_connection(
-                &app,
-                &state,
-                ConnectionStatus::Connecting,
-                None,
-                "Connecting to the Codex farm",
-            );
-            let monitor_revision = state.monitor_revision.load(Ordering::Relaxed);
-            let configured_path = state
-                .persisted
-                .lock()
-                .expect("persisted lock")
-                .settings
-                .codex_path
-                .clone();
-            let codex = match resolve_codex(&configured_path) {
-                Ok(Some(path)) => path,
-                Ok(None) => {
-                    *state.codex_path.lock().expect("codex path lock") = None;
-                    update_connection(
-                        &app,
-                        &state,
-                        ConnectionStatus::MissingCodex,
-                        None,
-                        "Codex was not found. Open Settings to choose its executable, or install the standalone Codex build.",
-                    );
-                    thread::sleep(Duration::from_secs(5));
-                    continue;
+            let revision = state.monitor_revision.load(Ordering::Relaxed);
+            if revision != observed_revision {
+                let settings = state
+                    .persisted
+                    .lock()
+                    .expect("persisted lock")
+                    .settings
+                    .clone();
+                prepare_hosts(&app, &state, &settings);
+                if settings.local_enabled {
+                    let local_app = app.clone();
+                    let local_state = state.clone();
+                    let configured_path = settings.codex_path.clone();
+                    thread::spawn(move || {
+                        monitor_local(local_app, local_state, revision, configured_path)
+                    });
                 }
-                Err(error) => {
-                    *state.codex_path.lock().expect("codex path lock") = None;
-                    update_connection(&app, &state, ConnectionStatus::MissingCodex, None, &error);
-                    thread::sleep(Duration::from_secs(5));
-                    continue;
+                for host in settings.ssh_hosts.into_iter().filter(|host| host.enabled) {
+                    let remote_app = app.clone();
+                    let remote_state = state.clone();
+                    thread::spawn(move || monitor_remote(remote_app, remote_state, revision, host));
                 }
-            };
-
-            let version = codex_version(&codex);
-            *state.codex_path.lock().expect("codex path lock") = Some(codex.clone());
-            let transport = LocalDaemonTransport::new(codex, monitor_revision);
-            if let Err(error) = transport.run(&app, &state) {
-                let status = if error.contains("cannot start the managed daemon") {
-                    ConnectionStatus::Incompatible
-                } else {
-                    ConnectionStatus::Disconnected
-                };
-                update_connection(&app, &state, status, version, &error);
+                observed_revision = revision;
             }
-            thread::sleep(backoff);
-            backoff = (backoff * 2).min(Duration::from_secs(5));
+            thread::sleep(Duration::from_millis(200));
         }
     });
 }
 
-fn monitor_socket(
-    mut socket: WebSocket<UnixStream>,
+fn prepare_hosts(app: &AppHandle, state: &Arc<SharedState>, settings: &PlowSettings) {
+    let mut connections = Vec::new();
+    let mut host_ids = HashSet::new();
+    if settings.local_enabled {
+        host_ids.insert("local".to_string());
+        connections.push(ConnectionInfo {
+            host_id: "local".to_string(),
+            host_label: "This computer".to_string(),
+            host_kind: HostKind::Local,
+            status: ConnectionStatus::Connecting,
+            codex_version: None,
+            codex_path: None,
+            message: "Connecting to the local Codex daemon".to_string(),
+        });
+    } else {
+        *state.codex_path.lock().expect("codex path lock") = None;
+    }
+    for host in settings.ssh_hosts.iter().filter(|host| host.enabled) {
+        let id = remote::host_id(&host.alias);
+        host_ids.insert(id.clone());
+        connections.push(ConnectionInfo {
+            host_id: id,
+            host_label: host.alias.clone(),
+            host_kind: HostKind::Ssh,
+            status: ConnectionStatus::Connecting,
+            codex_version: None,
+            codex_path: Some(remote::remote_codex_command(&host.codex_path).to_string()),
+            message: format!("Connecting to {} over SSH", host.alias),
+        });
+    }
+    {
+        let mut snapshot = state.snapshot.lock().expect("snapshot lock");
+        snapshot.workers.retain(|worker| {
+            host_ids.contains(&worker.host_id)
+                && matches!(
+                    worker.status,
+                    WorkerStatus::Completed | WorkerStatus::Failed
+                )
+        });
+        snapshot.connections = connections;
+    }
+    {
+        let mut persisted = state.persisted.lock().expect("persisted lock");
+        persisted
+            .attention
+            .retain(|worker| host_ids.contains(&worker.host_id));
+    }
+    let _ = state.save();
+    emit_snapshot(app, state);
+}
+
+fn monitor_local(app: AppHandle, state: Arc<SharedState>, revision: u64, configured_path: String) {
+    let mut backoff = Duration::from_secs(1);
+    while state.monitor_revision.load(Ordering::Relaxed) == revision {
+        update_connection_fields(
+            &app,
+            &state,
+            "local",
+            "This computer",
+            HostKind::Local,
+            ConnectionStatus::Connecting,
+            None,
+            None,
+            "Connecting to the local Codex daemon",
+        );
+        let codex = match resolve_codex(&configured_path) {
+            Ok(Some(path)) => path,
+            Ok(None) => {
+                *state.codex_path.lock().expect("codex path lock") = None;
+                update_connection_fields(
+                    &app,
+                    &state,
+                    "local",
+                    "This computer",
+                    HostKind::Local,
+                    ConnectionStatus::MissingCodex,
+                    None,
+                    None,
+                    "Codex was not found. Open Settings to choose its executable, or install the standalone Codex build.",
+                );
+                if !wait_for_retry(&state, revision, Duration::from_secs(5)) {
+                    break;
+                }
+                continue;
+            }
+            Err(error) => {
+                *state.codex_path.lock().expect("codex path lock") = None;
+                update_connection_fields(
+                    &app,
+                    &state,
+                    "local",
+                    "This computer",
+                    HostKind::Local,
+                    ConnectionStatus::MissingCodex,
+                    None,
+                    None,
+                    &error,
+                );
+                if !wait_for_retry(&state, revision, Duration::from_secs(5)) {
+                    break;
+                }
+                continue;
+            }
+        };
+        let version = codex_version(&codex);
+        *state.codex_path.lock().expect("codex path lock") = Some(codex.clone());
+        let transport = LocalDaemonTransport::new(codex, revision);
+        let result = transport.run(&app, &state);
+        if state.monitor_revision.load(Ordering::Relaxed) != revision {
+            break;
+        }
+        if let Err(error) = result {
+            let status = if error.contains("cannot start the managed daemon") {
+                ConnectionStatus::Incompatible
+            } else {
+                ConnectionStatus::Disconnected
+            };
+            update_connection(&app, &state, &transport, status, version, &error);
+        }
+        if !wait_for_retry(&state, revision, backoff) {
+            break;
+        }
+        backoff = (backoff * 2).min(Duration::from_secs(5));
+    }
+}
+
+fn monitor_remote(app: AppHandle, state: Arc<SharedState>, revision: u64, host: SshHostSettings) {
+    let transport = SshDaemonTransport::new(host, revision);
+    let mut backoff = Duration::from_secs(1);
+    while state.monitor_revision.load(Ordering::Relaxed) == revision {
+        update_connection(
+            &app,
+            &state,
+            &transport,
+            ConnectionStatus::Connecting,
+            None,
+            &format!("Connecting to {} over SSH", transport.host_label()),
+        );
+        let result = transport.run(&app, &state);
+        if state.monitor_revision.load(Ordering::Relaxed) != revision {
+            break;
+        }
+        if let Err(error) = result {
+            let status = if error.contains("managed standalone Codex install not found") {
+                ConnectionStatus::Incompatible
+            } else {
+                ConnectionStatus::Disconnected
+            };
+            update_connection(
+                &app,
+                &state,
+                &transport,
+                status,
+                None,
+                &format!("{error}. Confirm `ssh {}` works and Codex is installed and authenticated on that host.", transport.host_label()),
+            );
+        }
+        if !wait_for_retry(&state, revision, backoff) {
+            break;
+        }
+        backoff = (backoff * 2).min(Duration::from_secs(5));
+    }
+}
+
+fn wait_for_retry(state: &Arc<SharedState>, revision: u64, duration: Duration) -> bool {
+    let deadline = Instant::now() + duration;
+    while Instant::now() < deadline {
+        if state.monitor_revision.load(Ordering::Relaxed) != revision {
+            return false;
+        }
+        thread::sleep(Duration::from_millis(100));
+    }
+    true
+}
+
+fn monitor_socket<S: Read + Write>(
+    mut socket: WebSocket<S>,
     app: &AppHandle,
     state: &Arc<SharedState>,
-    monitor_revision: u64,
+    transport: &dyn HostTransport,
 ) -> Result<(), String> {
     write_message(
         &mut socket,
@@ -150,7 +396,7 @@ fn monitor_socket(
     let mut repo_cache = HashMap::new();
 
     loop {
-        if state.monitor_revision.load(Ordering::Relaxed) != monitor_revision {
+        if state.monitor_revision.load(Ordering::Relaxed) != transport.monitor_revision() {
             return Ok(());
         }
         if initialized && Instant::now() >= next_poll {
@@ -175,6 +421,9 @@ fn monitor_socket(
 
         match socket.read() {
             Ok(Message::Text(line)) => {
+                if state.monitor_revision.load(Ordering::Relaxed) != transport.monitor_revision() {
+                    return Ok(());
+                }
                 let message: Value = serde_json::from_str(&line)
                     .map_err(|error| format!("Codex sent malformed JSON: {error}"))?;
 
@@ -189,9 +438,14 @@ fn monitor_socket(
                     update_connection(
                         app,
                         state,
+                        transport,
                         ConnectionStatus::Connected,
                         codex_version_from_user_agent(&message),
-                        "Watching the shared local Codex daemon",
+                        &if matches!(transport.host_kind(), HostKind::Ssh) {
+                            format!("Watching {} over SSH", transport.host_label())
+                        } else {
+                            "Watching the shared local Codex daemon".to_string()
+                        },
                     );
                     next_poll = Instant::now();
                     continue;
@@ -203,19 +457,26 @@ fn monitor_socket(
                         .and_then(Value::as_str)
                         .unwrap_or("Codex protocol error");
                     if text.contains("method") || text.contains("unsupported") {
-                        update_connection(app, state, ConnectionStatus::Incompatible, None, text);
+                        update_connection(
+                            app,
+                            state,
+                            transport,
+                            ConnectionStatus::Incompatible,
+                            None,
+                            text,
+                        );
                     }
                     continue;
                 }
 
                 if let Some(data) = message.pointer("/result/data").and_then(Value::as_array) {
-                    reconcile_threads(data, state, &mut repo_cache);
+                    reconcile_threads(data, transport, state, &mut repo_cache);
                     emit_snapshot(app, state);
                     continue;
                 }
 
                 if let Some(method) = message.get("method").and_then(Value::as_str) {
-                    handle_notification(method, message.get("params"), state);
+                    handle_notification(method, message.get("params"), transport, state);
                     emit_snapshot(app, state);
                 }
             }
@@ -236,7 +497,10 @@ fn monitor_socket(
     }
 }
 
-fn write_message(socket: &mut WebSocket<UnixStream>, message: &Value) -> Result<(), String> {
+fn write_message<S: Read + Write>(
+    socket: &mut WebSocket<S>,
+    message: &Value,
+) -> Result<(), String> {
     socket
         .send(Message::Text(message.to_string().into()))
         .map_err(|error| format!("Could not write to Codex: {error}"))
@@ -264,9 +528,11 @@ fn daemon_socket(codex: &Path) -> Result<PathBuf, String> {
 
 fn reconcile_threads(
     data: &[Value],
+    transport: &dyn HostTransport,
     state: &Arc<SharedState>,
     repo_cache: &mut HashMap<String, (String, String)>,
 ) {
+    let host_id = transport.host_id();
     let now = unix_time();
     let dismissed = state
         .persisted
@@ -274,10 +540,13 @@ fn reconcile_threads(
         .expect("persisted lock")
         .dismissed
         .clone();
-    let mut snapshot = state.snapshot.lock().expect("snapshot lock");
-    let previous: HashMap<String, Worker> = snapshot
+    let previous: HashMap<String, Worker> = state
+        .snapshot
+        .lock()
+        .expect("snapshot lock")
         .workers
         .iter()
+        .filter(|worker| worker.host_id == host_id)
         .cloned()
         .map(|worker| (worker.id.clone(), worker))
         .collect();
@@ -285,9 +554,10 @@ fn reconcile_threads(
     let mut seen = HashSet::new();
 
     for thread in data {
-        let Some(id) = thread.get("id").and_then(Value::as_str) else {
+        let Some(thread_id) = thread.get("id").and_then(Value::as_str) else {
             continue;
         };
+        let id = worker_id(&host_id, thread_id);
         seen.insert(id.to_string());
         let status_type = thread
             .pointer("/status/type")
@@ -297,8 +567,14 @@ fn reconcile_threads(
         let system_error = status_type == "systemError";
 
         if active || system_error {
-            next.push(normalize_worker(thread, previous.get(id), repo_cache, now));
-        } else if let Some(old) = previous.get(id) {
+            next.push(normalize_worker(
+                thread,
+                previous.get(&id),
+                transport,
+                repo_cache,
+                now,
+            ));
+        } else if let Some(old) = previous.get(&id) {
             if matches!(
                 old.status,
                 WorkerStatus::Running | WorkerStatus::WaitingApproval | WorkerStatus::WaitingInput
@@ -351,15 +627,28 @@ fn reconcile_threads(
         })
         .cloned()
         .collect();
-    snapshot.workers = next;
+    let mut snapshot = state.snapshot.lock().expect("snapshot lock");
+    snapshot.workers.retain(|worker| worker.host_id != host_id);
+    snapshot.workers.extend(next);
+    snapshot
+        .workers
+        .sort_by_key(|worker| std::cmp::Reverse(worker.updated_at));
     drop(snapshot);
 
     let changed = {
         let mut persisted = state.persisted.lock().expect("persisted lock");
-        if persisted.attention == attention {
+        let mut combined = persisted
+            .attention
+            .iter()
+            .filter(|worker| worker.host_id != host_id)
+            .cloned()
+            .collect::<Vec<_>>();
+        combined.extend(attention);
+        combined.sort_by_key(|worker| std::cmp::Reverse(worker.updated_at));
+        if persisted.attention == combined {
             false
         } else {
-            persisted.attention = attention;
+            persisted.attention = combined;
             true
         }
     };
@@ -371,14 +660,17 @@ fn reconcile_threads(
 fn normalize_worker(
     thread: &Value,
     previous: Option<&Worker>,
+    transport: &dyn HostTransport,
     repo_cache: &mut HashMap<String, (String, String)>,
     now: i64,
 ) -> Worker {
-    let id = thread
+    let thread_id = thread
         .get("id")
         .and_then(Value::as_str)
         .unwrap_or_default()
         .to_string();
+    let host_id = transport.host_id();
+    let id = worker_id(&host_id, &thread_id);
     let cwd = thread
         .get("cwd")
         .and_then(Value::as_str)
@@ -386,7 +678,7 @@ fn normalize_worker(
         .to_string();
     let (repo_name, repo_path) = repo_cache
         .entry(cwd.clone())
-        .or_insert_with(|| repo_for_cwd(&cwd))
+        .or_insert_with(|| transport.repo_for_cwd(&cwd))
         .clone();
     let flags = thread
         .pointer("/status/activeFlags")
@@ -417,10 +709,14 @@ fn normalize_worker(
 
     Worker {
         id: id.clone(),
+        thread_id: thread_id.clone(),
+        host_id: host_id.clone(),
+        host_label: transport.host_label(),
+        host_kind: transport.host_kind(),
         parent_id: thread
             .get("parentThreadId")
             .and_then(Value::as_str)
-            .map(str::to_string),
+            .map(|parent| worker_id(&host_id, parent)),
         display_name: display_name_for_cwd(&cwd, &repo_name),
         thread_name: thread
             .get("name")
@@ -470,7 +766,12 @@ fn transition_attention_id(
     Some(format!("{thread_id}:{kind}:{now}"))
 }
 
-fn handle_notification(method: &str, params: Option<&Value>, state: &Arc<SharedState>) {
+fn handle_notification(
+    method: &str,
+    params: Option<&Value>,
+    transport: &dyn HostTransport,
+    state: &Arc<SharedState>,
+) {
     let Some(params) = params else { return };
     if method != "turn/completed" {
         return;
@@ -490,7 +791,7 @@ fn handle_notification(method: &str, params: Option<&Value>, state: &Arc<SharedS
     let Some(index) = snapshot
         .workers
         .iter()
-        .position(|worker| worker.id == thread_id)
+        .position(|worker| worker.host_id == transport.host_id() && worker.thread_id == thread_id)
     else {
         return;
     };
@@ -498,7 +799,7 @@ fn handle_notification(method: &str, params: Option<&Value>, state: &Arc<SharedS
         snapshot.workers.remove(index);
         return;
     }
-    let attention_id = format!("{thread_id}:{turn_id}");
+    let attention_id = format!("{}:{thread_id}:{turn_id}", transport.host_id());
     if state
         .persisted
         .lock()
@@ -519,7 +820,9 @@ fn handle_notification(method: &str, params: Option<&Value>, state: &Arc<SharedS
     let attention = worker.clone();
     drop(snapshot);
     let mut persisted = state.persisted.lock().expect("persisted lock");
-    persisted.attention.retain(|worker| worker.id != thread_id);
+    persisted
+        .attention
+        .retain(|worker| !(worker.host_id == transport.host_id() && worker.thread_id == thread_id));
     persisted.attention.push(attention);
     drop(persisted);
     let _ = state.save();
@@ -541,23 +844,78 @@ fn source_label(source: Option<&Value>) -> String {
 fn update_connection(
     app: &AppHandle,
     state: &Arc<SharedState>,
+    transport: &dyn HostTransport,
     status: ConnectionStatus,
     version: Option<String>,
     message: &str,
 ) {
-    let codex_path = state
-        .codex_path
-        .lock()
-        .expect("codex path lock")
-        .as_ref()
-        .map(|path| path.to_string_lossy().into_owned());
-    state.snapshot.lock().expect("snapshot lock").connection = ConnectionInfo {
+    update_connection_fields(
+        app,
+        state,
+        &transport.host_id(),
+        &transport.host_label(),
+        transport.host_kind(),
+        status,
+        version,
+        transport.configured_codex(),
+        message,
+    );
+}
+
+#[allow(clippy::too_many_arguments)]
+fn update_connection_fields(
+    app: &AppHandle,
+    state: &Arc<SharedState>,
+    host_id: &str,
+    host_label: &str,
+    host_kind: HostKind,
+    status: ConnectionStatus,
+    version: Option<String>,
+    codex_path: Option<String>,
+    message: &str,
+) {
+    let connection = ConnectionInfo {
+        host_id: host_id.to_string(),
+        host_label: host_label.to_string(),
+        host_kind,
         status,
         codex_version: version,
         codex_path,
         message: message.to_string(),
     };
+    let mut snapshot = state.snapshot.lock().expect("snapshot lock");
+    if let Some(existing) = snapshot
+        .connections
+        .iter_mut()
+        .find(|connection| connection.host_id == host_id)
+    {
+        *existing = connection;
+    } else {
+        return;
+    }
+    drop(snapshot);
     emit_snapshot(app, state);
+}
+
+fn worker_id(host_id: &str, thread_id: &str) -> String {
+    if host_id == "local" {
+        thread_id.to_string()
+    } else {
+        format!("{host_id}:{thread_id}")
+    }
+}
+
+fn repo_name_and_path(root: &str) -> (String, String) {
+    if root.is_empty() {
+        return ("Remote files".to_string(), String::new());
+    }
+    let name = Path::new(root)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .filter(|name| !name.is_empty())
+        .unwrap_or("Remote files")
+        .to_string();
+    (name, root.to_string())
 }
 
 fn resolve_codex(configured_path: &str) -> Result<Option<PathBuf>, String> {
@@ -657,9 +1015,20 @@ mod tests {
             "cwd": "/srv/projects/plow/frontend",
             "status": { "type": "active", "activeFlags": [] }
         });
-        let worker = normalize_worker(&thread, None, &mut HashMap::new(), 1);
+        let transport = LocalDaemonTransport::new(PathBuf::from("/bin/true"), 0);
+        let worker = normalize_worker(&thread, None, &transport, &mut HashMap::new(), 1);
         assert_eq!(worker.display_name, "frontend");
         assert_ne!(worker.repo_name, "unknown");
+        assert_eq!(worker.thread_id, "019f5ade-99ad-7ed1-b2f3-159136634cf7");
+        assert_eq!(worker.host_id, "local");
+    }
+
+    #[test]
+    fn namespaces_remote_worker_ids() {
+        assert_eq!(
+            worker_id("ssh:devbox", "019f5ade-99ad-7ed1-b2f3-159136634cf7"),
+            "ssh:devbox:019f5ade-99ad-7ed1-b2f3-159136634cf7"
+        );
     }
 
     #[test]

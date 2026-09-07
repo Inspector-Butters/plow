@@ -6,10 +6,10 @@ export function groupWorkers(workers: Worker[]): RepoPlot[] {
   const plots = new Map<string, RepoPlot>();
 
   for (const worker of workers) {
-    const key = worker.repoPath || worker.repoName;
+    const key = `${worker.hostId}:${worker.repoPath || worker.repoName}`;
     const plot = plots.get(key) ?? {
       id: key,
-      name: worker.repoName,
+      name: worker.hostKind === "ssh" ? `${worker.repoName} · ${worker.hostLabel}` : worker.repoName,
       path: worker.repoPath,
       workers: [],
     };
@@ -67,4 +67,3 @@ export function elapsedLabel(worker: Worker, now = Date.now()): string {
   if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
   return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`;
 }
-

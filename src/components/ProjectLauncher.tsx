@@ -1,33 +1,36 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { listProjects, startAgent } from "../lib/bridge";
-import type { ProjectFolder } from "../types";
+import type { ProjectFolder, ProjectLocation } from "../types";
 
 interface ProjectLauncherProps {
-  developmentHome: string;
+  locations: ProjectLocation[];
   onClose: () => void;
   onOpenSettings: () => void;
 }
 
-export function ProjectLauncher({ developmentHome, onClose, onOpenSettings }: ProjectLauncherProps) {
+export function ProjectLauncher({ locations, onClose, onOpenSettings }: ProjectLauncherProps) {
+  const [hostId, setHostId] = useState(locations[0]?.hostId ?? "");
   const [projects, setProjects] = useState<ProjectFolder[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [startingPath, setStartingPath] = useState<string | null>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
+  const location = locations.find((item) => item.hostId === hostId) ?? locations[0] ?? null;
+  const developmentHome = location?.developmentHome ?? "";
 
   const refresh = useCallback(async () => {
-    if (!developmentHome) {
+    if (!developmentHome || !location) {
       setProjects([]);
       return;
     }
     setProjects(null);
     setError(null);
     try {
-      setProjects(await listProjects());
+      setProjects(await listProjects(location.hostId));
     } catch (reason) {
       setProjects([]);
       setError(reason instanceof Error ? reason.message : String(reason));
     }
-  }, [developmentHome]);
+  }, [developmentHome, location]);
 
   useEffect(() => {
     closeRef.current?.focus();
@@ -46,7 +49,8 @@ export function ProjectLauncher({ developmentHome, onClose, onOpenSettings }: Pr
     setStartingPath(project.path);
     setError(null);
     try {
-      await startAgent(project.path);
+      if (!location) throw new Error("Choose a Codex host first");
+      await startAgent(location.hostId, project.path);
       onClose();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason));
@@ -61,14 +65,28 @@ export function ProjectLauncher({ developmentHome, onClose, onOpenSettings }: Pr
         <p className="project-launcher__eyebrow">New Codex session</p>
         <h2 id="project-launcher-title">Choose a project</h2>
 
-        {!developmentHome ? (
+        {locations.length > 1 && (
+          <div className="settings-field project-launcher__host">
+            <label htmlFor="project-host">Run on</label>
+            <select id="project-host" value={location?.hostId ?? ""} onChange={(event) => setHostId(event.target.value)} disabled={Boolean(startingPath)}>
+              {locations.map((item) => <option key={item.hostId} value={item.hostId}>{item.hostLabel}{item.hostKind === "ssh" ? " — SSH" : ""}</option>)}
+            </select>
+          </div>
+        )}
+
+        {!location ? (
           <div className="project-launcher__setup">
-            <strong>Choose your development folder first</strong>
-            <span>Plow will list each project folder here and launch Codex in the one you select.</span>
+            <strong>No Codex hosts are enabled</strong>
+            <span>Enable this computer or add an SSH host in Settings.</span>
+          </div>
+        ) : !developmentHome ? (
+          <div className="project-launcher__setup">
+            <strong>Choose a development folder for {location.hostLabel}</strong>
+            <span>Plow will list its immediate project folders and launch Codex in the one you select.</span>
           </div>
         ) : (
           <>
-            <p className="project-launcher__home" title={developmentHome}>{developmentHome}</p>
+            <p className="project-launcher__home" title={developmentHome}>{location.hostKind === "ssh" ? `${location.hostLabel} · ` : ""}{developmentHome}</p>
             {projects === null ? (
               <div className="project-launcher__loading" role="status"><span />Looking for projects…</div>
             ) : projects.length > 0 ? (

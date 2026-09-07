@@ -105,7 +105,7 @@ jobs:
           releaseBody: |
             Download the AppImage or Debian package for Linux, or the DMG matching your Mac (Apple Silicon or Intel).
 
-            Plow requires a current Codex CLI with managed app-server daemon support.
+            Plow requires a current Codex CLI with managed app-server daemon support on each monitored local or SSH host.
           releaseDraft: false
           prerelease: false
           retryAttempts: 3

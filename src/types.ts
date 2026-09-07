@@ -6,9 +6,14 @@ export type WorkerStatus =
   | "failed";
 
 export type FarmActivity = "plowing" | "watering" | "planting" | "harvesting" | "carrying";
+export type HostKind = "local" | "ssh";
 
 export interface Worker {
   id: string;
+  threadId: string;
+  hostId: string;
+  hostLabel: string;
+  hostKind: HostKind;
   parentId: string | null;
   displayName: string;
   threadName: string;
@@ -35,6 +40,9 @@ export interface RepoPlot {
 export type ConnectionStatus = "connecting" | "connected" | "disconnected" | "missingCodex" | "incompatible";
 
 export interface ConnectionInfo {
+  hostId: string;
+  hostLabel: string;
+  hostKind: HostKind;
   status: ConnectionStatus;
   codexVersion: string | null;
   codexPath: string | null;
@@ -43,7 +51,7 @@ export interface ConnectionInfo {
 
 export interface MonitorSnapshot {
   workers: Worker[];
-  connection: ConnectionInfo;
+  connections: ConnectionInfo[];
 }
 
 export interface ProjectFolder {
@@ -53,13 +61,29 @@ export interface ProjectFolder {
 
 export type AgentViewMode = "field" | "classic";
 
+export interface SshHostSettings {
+  alias: string;
+  codexPath: string;
+  developmentHome: string;
+  enabled: boolean;
+}
+
 export interface PlowSettings {
   notifyWhenUnfocused: boolean;
   keepInTray: boolean;
   reducedMotion: boolean;
+  localEnabled: boolean;
   codexPath: string;
   developmentHome: string;
+  sshHosts: SshHostSettings[];
   viewMode: AgentViewMode;
+}
+
+export interface ProjectLocation {
+  hostId: string;
+  hostLabel: string;
+  hostKind: HostKind;
+  developmentHome: string;
 }
 
 export interface AttentionItem {
