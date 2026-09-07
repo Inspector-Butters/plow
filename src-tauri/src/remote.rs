@@ -298,7 +298,6 @@ impl SshProxyStream {
                         let mut log = stderr_writer.lock().expect("ssh stderr lock");
                         if log.len() < 16_384 {
                             log.push_str(&text);
-                            log.truncate(log.len().min(16_384));
                         }
                     }
                 }
@@ -342,7 +341,13 @@ impl Read for SshProxyStream {
                         "SSH read timed out",
                     ));
                 }
-                Err(mpsc::RecvTimeoutError::Disconnected) => return Ok(0),
+                Err(mpsc::RecvTimeoutError::Disconnected) => {
+                    let details = self.error_details();
+                    if details.is_empty() {
+                        return Ok(0);
+                    }
+                    return Err(io::Error::new(io::ErrorKind::ConnectionAborted, details));
+                }
             }
         }
         let size = buffer.len().min(self.pending.len());
