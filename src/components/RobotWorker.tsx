@@ -17,6 +17,11 @@ const activityLabels: Record<FarmActivity, string> = {
   planting: "Planting seeds",
   harvesting: "Harvesting wheat",
   carrying: "Hauling supplies",
+  digging: "Digging the soil",
+  raking: "Raking leaves",
+  repairing: "Repairing the fence",
+  feeding: "Feeding the chickens",
+  chopping: "Chopping firewood",
 };
 
 function ActivityScene({ activity }: { activity: FarmActivity }) {
@@ -59,6 +64,40 @@ function ActivityScene({ activity }: { activity: FarmActivity }) {
     ),
     carrying: (
       <span className="work-prop harvest-crate"><i /><i /><i /></span>
+    ),
+    digging: (
+      <>
+        <span className="work-prop shovel"><i className="shovel__blade" /></span>
+        <span className="work-effect digging-hole" />
+        <span className="work-effect digging-clods"><i /><i /><i /></span>
+      </>
+    ),
+    raking: (
+      <>
+        <span className="work-prop rake"><i className="rake__head" /></span>
+        <span className="work-effect rake-leaves"><i /><i /><i /><i /></span>
+      </>
+    ),
+    repairing: (
+      <>
+        <span className="work-prop hammer"><i className="hammer__head" /></span>
+        <span className="work-effect fence-post"><i /><i /></span>
+        <span className="work-effect repair-sparks"><i /><i /><i /></span>
+      </>
+    ),
+    feeding: (
+      <>
+        <span className="work-prop feed-scoop"><i /></span>
+        <span className="work-effect falling-feed"><i /><i /><i /><i /></span>
+        <span className="work-effect feed-trough"><i /><i /><i /></span>
+      </>
+    ),
+    chopping: (
+      <>
+        <span className="work-prop axe"><i className="axe__head" /></span>
+        <span className="work-effect chopping-stump"><i /></span>
+        <span className="work-effect wood-chips"><i /><i /><i /></span>
+      </>
     ),
   };
 

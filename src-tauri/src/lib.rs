@@ -37,6 +37,11 @@ pub enum FarmActivity {
     Planting,
     Harvesting,
     Carrying,
+    Digging,
+    Raking,
+    Repairing,
+    Feeding,
+    Chopping,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -639,12 +644,17 @@ pub fn activity_for(id: &str) -> FarmActivity {
     let hash = id.bytes().fold(0_u64, |value, byte| {
         value.wrapping_mul(31).wrapping_add(byte as u64)
     });
-    match hash % 5 {
+    match hash % 10 {
         0 => FarmActivity::Plowing,
         1 => FarmActivity::Watering,
         2 => FarmActivity::Planting,
         3 => FarmActivity::Harvesting,
-        _ => FarmActivity::Carrying,
+        4 => FarmActivity::Carrying,
+        5 => FarmActivity::Digging,
+        6 => FarmActivity::Raking,
+        7 => FarmActivity::Repairing,
+        8 => FarmActivity::Feeding,
+        _ => FarmActivity::Chopping,
     }
 }
 
@@ -756,18 +766,22 @@ mod tests {
 
     #[test]
     fn activity_assignment_is_stable() {
-        assert!(matches!(
-            activity_for("thread-a"),
-            FarmActivity::Plowing
-                | FarmActivity::Watering
-                | FarmActivity::Planting
-                | FarmActivity::Harvesting
-                | FarmActivity::Carrying
-        ));
-        assert_eq!(
-            serde_json::to_string(&activity_for("thread-a")).unwrap(),
-            serde_json::to_string(&activity_for("thread-a")).unwrap()
-        );
+        let assignments = [
+            ("d", FarmActivity::Plowing),
+            ("e", FarmActivity::Watering),
+            ("f", FarmActivity::Planting),
+            ("g", FarmActivity::Harvesting),
+            ("h", FarmActivity::Carrying),
+            ("i", FarmActivity::Digging),
+            ("j", FarmActivity::Raking),
+            ("k", FarmActivity::Repairing),
+            ("l", FarmActivity::Feeding),
+            ("m", FarmActivity::Chopping),
+        ];
+
+        for (id, activity) in assignments {
+            assert_eq!(activity_for(id), activity);
+        }
     }
 
     #[test]

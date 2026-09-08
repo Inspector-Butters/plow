@@ -5,7 +5,17 @@ export type WorkerStatus =
   | "completed"
   | "failed";
 
-export type FarmActivity = "plowing" | "watering" | "planting" | "harvesting" | "carrying";
+export type FarmActivity =
+  | "plowing"
+  | "watering"
+  | "planting"
+  | "harvesting"
+  | "carrying"
+  | "digging"
+  | "raking"
+  | "repairing"
+  | "feeding"
+  | "chopping";
 export type HostKind = "local" | "ssh";
 
 export interface Worker {

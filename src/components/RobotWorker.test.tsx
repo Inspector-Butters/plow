@@ -5,7 +5,18 @@ import { workerAppearance } from "../lib/layout";
 import type { FarmActivity } from "../types";
 import { RobotWorker } from "./RobotWorker";
 
-const activities: FarmActivity[] = ["plowing", "watering", "planting", "harvesting", "carrying"];
+const activities: FarmActivity[] = [
+  "plowing",
+  "watering",
+  "planting",
+  "harvesting",
+  "carrying",
+  "digging",
+  "raking",
+  "repairing",
+  "feeding",
+  "chopping",
+];
 
 afterEach(cleanup);
 
