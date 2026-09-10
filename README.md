@@ -17,7 +17,9 @@ sh install.sh
 
 Plow checks the latest GitHub release after launch. When a newer signed build is available, it asks before downloading anything, shows installation progress, and relaunches into the new version. Version 0.3.0 is the first self-updating release, so earlier versions need one final manual install.
 
-On Linux, the installer puts the matching AppImage at `~/.local/bin/plow` (or `$XDG_BIN_HOME/plow`). On macOS, it downloads and opens the DMG for Apple Silicon or Intel; drag Plow into Applications. The GitHub macOS builds are ad-hoc signed rather than notarized, so the first launch may require right-clicking Plow and choosing **Open**, or allowing it in **System Settings → Privacy & Security**.
+On Linux, the installer puts the matching AppImage at `~/.local/bin/plow` (or `$XDG_BIN_HOME/plow`). On macOS, it downloads and opens the DMG for Apple Silicon or Intel; drag Plow into Applications. Releases starting with 0.4.8 require Developer ID signing and Apple notarization. Older macOS builds use ad-hoc signatures and may require approval in **System Settings → Privacy & Security**.
+
+When starting or resuming a session on macOS, allow Plow to control Terminal when prompted. Plow asks Terminal to run the session through `/bin/sh` in a new window. If you previously denied access, enable it under **System Settings → Privacy & Security → Automation → Plow → Terminal**.
 
 For local monitoring, Plow requires a current [Codex CLI](https://learn.chatgpt.com/docs/developer-commands?surface=cli) with managed app-server daemon support. Sessions monitored by Plow should connect to the shared daemon:
 
@@ -98,3 +100,18 @@ gh secret set TAURI_SIGNING_PRIVATE_KEY < /secure/path/to/updater.key
 ```
 
 Back up that key securely. Replacing or losing it prevents installed copies from accepting future updates.
+
+macOS releases also require these repository Actions secrets, following [Tauri's macOS signing guide](https://v2.tauri.app/distribute/sign/macos/):
+
+| Secret | Value |
+| --- | --- |
+| `APPLE_CERTIFICATE` | Base64-encoded `.p12` export containing a Developer ID Application certificate and its private key. |
+| `APPLE_CERTIFICATE_PASSWORD` | Password protecting the `.p12` export. |
+| `APPLE_SIGNING_IDENTITY` | Full certificate identity, such as `Developer ID Application: Your Name (TEAMID)`. |
+| `APPLE_ID` | Apple account email used for notarization. |
+| `APPLE_PASSWORD` | An app-specific password for that Apple account. |
+| `APPLE_TEAM_ID` | Apple Developer team ID associated with the certificate. |
+
+Create/export the Developer ID Application certificate on a Mac with access to your Apple Developer account. Encode the `.p12` with `openssl base64 -A -in /secure/path/certificate.p12 -out /secure/path/certificate-base64.txt`, then upload that file with `gh secret set APPLE_CERTIFICATE < /secure/path/certificate-base64.txt`. Set the remaining values in the repository's **Settings → Secrets and variables → Actions**. Keep the certificate, private key, and passwords outside the repository.
+
+The release workflow checks these secrets before publishing any platform. Tauri imports the certificate, signs the hardened macOS app with the configured entitlement file, and submits it to Apple for notarization and stapling. Missing credentials or an ad-hoc identity stop the release. After configuring missing secrets, rerun the failed workflow from GitHub Actions.
