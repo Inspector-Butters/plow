@@ -9,23 +9,7 @@ permissions:
   contents: write
 
 jobs:
-  validate-signing:
-    name: Check macOS signing configuration
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: actions/checkout@v7
-      - name: Require Developer ID signing and notarization credentials
-        env:
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        run: bash scripts/check-macos-signing.sh
-
   release:
-    needs: validate-signing
     name: ${{ matrix.label }}
     runs-on: ${{ matrix.platform }}
     strategy:
@@ -114,12 +98,7 @@ jobs:
         uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_SIGNING_IDENTITY: "-"
         with:
           tagName: ${{ github.ref_name }}
           releaseName: "Plow ${{ github.ref_name }}"

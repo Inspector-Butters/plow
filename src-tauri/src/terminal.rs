@@ -1,4 +1,4 @@
-use crate::{remote, shell::shell_quote, SshHostSettings};
+use crate::{remote, SshHostSettings};
 use std::{
     env, fs,
     os::unix::fs::PermissionsExt,
@@ -6,9 +6,6 @@ use std::{
     process::Command,
 };
 use uuid::Uuid;
-
-#[cfg(any(target_os = "macos", test))]
-mod macos;
 
 #[cfg(target_os = "linux")]
 use std::{
@@ -179,13 +176,27 @@ fn open_macos(codex: &Path, thread_id: Option<&str>, cwd: &Path) -> Result<Strin
             "start Codex",
         ),
     };
+    let script_path = env::temp_dir().join(format!("plow-terminal-{}.command", Uuid::new_v4()));
     let script = format!(
         "#!/bin/sh\ntrap 'rm -f -- \"$0\"' EXIT\ncd -- {} || exit 1\n{}\nstatus=$?\nif [ \"$status\" -ne 0 ]; then\n  printf '\\nPlow could not {} (exit %s).\\n' \"$status\"\n  printf 'Press Return to close this window. '\n  read -r _\nfi\nexit \"$status\"\n",
         shell_quote(&cwd),
         command,
         failure,
     );
-    macos::open_script(&script, action)
+    fs::write(&script_path, script)
+        .map_err(|error| format!("Could not prepare terminal handoff: {error}"))?;
+    fs::set_permissions(&script_path, fs::Permissions::from_mode(0o700))
+        .map_err(|error| format!("Could not make terminal handoff executable: {error}"))?;
+    Command::new("/usr/bin/open")
+        .args(["-a", "Terminal"])
+        .arg(&script_path)
+        .spawn()
+        .map_err(|error| format!("Could not open Terminal: {error}"))?;
+    Ok(action.to_string())
+}
+
+fn shell_quote(value: &str) -> String {
+    format!("'{}'", value.replace('\'', "'\\''"))
 }
 
 pub fn resume_command(thread_id: &str, cwd: &str) -> Result<String, String> {
@@ -231,11 +242,21 @@ fn open_macos_argv(argv: &[String], action: &str) -> Result<String, String> {
         .map(|value| shell_quote(value))
         .collect::<Vec<_>>()
         .join(" ");
+    let script_path = env::temp_dir().join(format!("plow-ssh-terminal-{}.command", Uuid::new_v4()));
     let script = format!(
         "#!/bin/sh\ntrap 'rm -f -- \"$0\"' EXIT\n{}\nstatus=$?\nif [ \"$status\" -ne 0 ]; then\n  printf '\\nPlow could not open the remote Codex session (exit %s).\\n' \"$status\"\n  printf 'Press Return to close this window. '\n  read -r _\nfi\nexit \"$status\"\n",
         command,
     );
-    macos::open_script(&script, action)
+    fs::write(&script_path, script)
+        .map_err(|error| format!("Could not prepare SSH terminal handoff: {error}"))?;
+    fs::set_permissions(&script_path, fs::Permissions::from_mode(0o700))
+        .map_err(|error| format!("Could not make SSH terminal handoff executable: {error}"))?;
+    Command::new("/usr/bin/open")
+        .args(["-a", "Terminal"])
+        .arg(&script_path)
+        .spawn()
+        .map_err(|error| format!("Could not open Terminal: {error}"))?;
+    Ok(action.to_string())
 }
 
 #[cfg(target_os = "linux")]

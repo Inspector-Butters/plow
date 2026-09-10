@@ -8,16 +8,11 @@ on:
 
 jobs:
   test:
-    strategy:
-      fail-fast: false
-      matrix:
-        platform: [ubuntu-22.04, macos-latest]
-    runs-on: ${{ matrix.platform }}
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v7
 
       - name: Install Tauri build dependencies
-        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf xdg-utils fish

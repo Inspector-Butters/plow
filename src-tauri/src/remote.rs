@@ -1,4 +1,4 @@
-use crate::{shell::shell_quote, terminal, SshHostSettings};
+use crate::{terminal, SshHostSettings};
 use std::{
     collections::VecDeque,
     fs,
@@ -214,6 +214,21 @@ fn login_shell_command(argv: &[String]) -> String {
         "exec /bin/sh -c 'exec \"${{SHELL:-/bin/sh}}\" -lc \"$1\"' plow-ssh {}",
         shell_quote(&format!("exec {command}"))
     )
+}
+
+fn shell_quote(value: &str) -> String {
+    let mut quoted = String::from("'");
+    for ch in value.chars() {
+        match ch {
+            '\'' => quoted.push_str("'\\''"),
+            // Fish interprets backslashes even inside single quotes. Escape
+            // them outside quotes so both Fish and POSIX shells preserve them.
+            '\\' => quoted.push_str("'\\\\'"),
+            _ => quoted.push(ch),
+        }
+    }
+    quoted.push('\'');
+    quoted
 }
 
 pub fn discover_aliases() -> Vec<String> {

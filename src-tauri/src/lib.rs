@@ -1,6 +1,5 @@
 mod protocol;
 mod remote;
-mod shell;
 mod terminal;
 
 use serde::{Deserialize, Serialize};
@@ -302,8 +301,7 @@ fn mark_reviewed(
     Ok(())
 }
 
-// Terminal automation can wait for macOS consent; keep the UI thread free.
-#[tauri::command(async)]
+#[tauri::command]
 fn open_thread(state: State<'_, Arc<SharedState>>, thread_id: String) -> Result<String, String> {
     let worker = state
         .snapshot
@@ -458,7 +456,7 @@ fn list_projects(
     list_remote_project_folders(&host)
 }
 
-#[tauri::command(async)]
+#[tauri::command]
 fn start_agent(
     state: State<'_, Arc<SharedState>>,
     host_id: String,
