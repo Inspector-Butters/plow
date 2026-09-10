@@ -44,4 +44,4 @@ For frontend-only changes, run `npm test`, `npm run check`, and `npm run build`.
 
 ## Release expectations
 
-After completing a change, commit it, push it, and publish a new release. Keep the version in `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, and `src-tauri/tauri.conf.json` in sync. Push the matching `v<version>` tag to trigger the release workflow, then verify that it succeeds and publishes the release assets.
+After completing a change, commit it, push it, and trigger a new release. Keep the version in `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, and `src-tauri/tauri.conf.json` in sync. Push the matching `v<version>` tag to trigger the release workflow. Starting the release is sufficient; do not wait for or monitor publication.
