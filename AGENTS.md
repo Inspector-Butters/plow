@@ -41,3 +41,7 @@ Native development requires the Rust stable toolchain and the platform prerequis
 ## Verification expectations
 
 For frontend-only changes, run `npm test`, `npm run check`, and `npm run build`. For Rust or IPC changes, also run `cargo test` and `cargo fmt --check`. If the local machine lacks Rust or native system packages, state that limitation explicitly and still run the frontend checks.
+
+## Release expectations
+
+After completing a change, commit it, push it, and publish a new release. Keep the version in `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, and `src-tauri/tauri.conf.json` in sync. Push the matching `v<version>` tag to trigger the release workflow, then verify that it succeeds and publishes the release assets.
