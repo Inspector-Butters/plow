@@ -207,14 +207,28 @@ fn login_shell_command(argv: &[String]) -> String {
         .map(|value| shell_quote(value))
         .collect::<Vec<_>>()
         .join(" ");
+    // SSH first parses this with the user's shell, which may be Fish. Keep
+    // POSIX parameter expansion inside sh, then load the user's login shell
+    // so Codex still gets its configured PATH. Pass the command as data.
     format!(
-        "exec \"${{SHELL:-/bin/sh}}\" -lc {}",
+        "exec /bin/sh -c 'exec \"${{SHELL:-/bin/sh}}\" -lc \"$1\"' plow-ssh {}",
         shell_quote(&format!("exec {command}"))
     )
 }
 
 fn shell_quote(value: &str) -> String {
-    format!("'{}'", value.replace('\'', "'\\''"))
+    let mut quoted = String::from("'");
+    for ch in value.chars() {
+        match ch {
+            '\'' => quoted.push_str("'\\''"),
+            // Fish interprets backslashes even inside single quotes. Escape
+            // them outside quotes so both Fish and POSIX shells preserve them.
+            '\\' => quoted.push_str("'\\\\'"),
+            _ => quoted.push(ch),
+        }
+    }
+    quoted.push('\'');
+    quoted
 }
 
 pub fn discover_aliases() -> Vec<String> {
@@ -392,18 +406,6 @@ mod tests {
     }
 
     #[test]
-    fn quotes_remote_arguments_for_the_login_shell() {
-        let command = login_shell_command(&[
-            "/opt/Codex tools/codex".to_string(),
-            "--cd".to_string(),
-            "/srv/farmer's field".to_string(),
-        ]);
-        assert!(command.contains("/opt/Codex tools/codex"));
-        assert!(command.contains("farmer"));
-        assert!(!command.contains("; rm"));
-    }
-
-    #[test]
     fn discovers_only_concrete_ssh_hosts() {
         let root = std::env::temp_dir().join(format!("plow-ssh-{}", uuid::Uuid::new_v4()));
         fs::create_dir_all(&root).unwrap();
@@ -423,5 +425,101 @@ mod tests {
         assert!(validate_project_selection("/srv/dev", "/srv/dev/plow").is_ok());
         assert!(validate_project_selection("/srv/dev", "/srv/dev/nested/plow").is_err());
         assert!(validate_project_selection("/srv/dev", "/srv/dev/../secret").is_err());
+    }
+}
+
+#[cfg(test)]
+mod shell_tests {
+    use super::login_shell_command;
+    use std::{io::Write, process::Command, process::Stdio};
+
+    fn check_login_shell(shell: &str) {
+        let values = [
+            "app-server",
+            "daemon",
+            "start",
+            "/opt/Codex tools/codex",
+            "/srv/farmer's field",
+            "",
+            "\\",
+            "\\\\",
+            "\\'",
+            "trailing\\",
+            "$(printf injected)",
+            "`printf injected`",
+            "; printf injected",
+            "\"$SHELL\"",
+            "* ? [abc] {a,b}",
+            "line1\nline2",
+        ];
+        let mut argv = vec!["/usr/bin/printf".to_string(), "%s\\0".to_string()];
+        argv.extend(values.iter().map(|value| value.to_string()));
+        let output = Command::new(shell)
+            .args(["-c", &login_shell_command(&argv)])
+            .env("SHELL", shell)
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "{:?}", output);
+        let expected: Vec<u8> = values
+            .iter()
+            .flat_map(|value| value.bytes().chain(std::iter::once(0)))
+            .collect();
+        assert_eq!(output.stdout, expected);
+
+        // The proxy needs unchanged stdin/stdout and the remote exit status.
+        let argv = [
+            "/bin/sh".to_string(),
+            "-c".to_string(),
+            "cat; printf 'remote error' >&2; exit 23".to_string(),
+        ];
+        let mut child = Command::new(shell)
+            .args(["-c", &login_shell_command(&argv)])
+            .env("SHELL", shell)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
+        let input = b"proxy\0data\n";
+        child.stdin.take().unwrap().write_all(input).unwrap();
+        let output = child.wait_with_output().unwrap();
+        assert_eq!(output.status.code(), Some(23));
+        assert_eq!(output.stdout, input);
+        assert_eq!(output.stderr, b"remote error");
+    }
+
+    #[test]
+    fn remote_commands_work_in_bash() {
+        check_login_shell("/bin/bash");
+    }
+
+    #[test]
+    fn remote_commands_work_in_fish() {
+        match Command::new("fish").arg("--version").output() {
+            Ok(output) => assert!(output.status.success()),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                eprintln!("Skipping Fish integration test: fish is not installed");
+                return;
+            }
+            Err(error) => panic!("Could not run fish: {error}"),
+        }
+        check_login_shell("fish");
+    }
+
+    #[test]
+    fn remote_commands_fall_back_to_sh_when_shell_is_unset_or_empty() {
+        let argv = ["/usr/bin/printf".to_string(), "fallback".to_string()];
+        for shell in [None, Some("")] {
+            let mut command = Command::new("/bin/sh");
+            command.args(["-c", &login_shell_command(&argv)]);
+            if let Some(shell) = shell {
+                command.env("SHELL", shell);
+            } else {
+                command.env_remove("SHELL");
+            }
+            let output = command.output().unwrap();
+            assert!(output.status.success(), "{:?}", output);
+            assert_eq!(output.stdout, b"fallback");
+        }
     }
 }
